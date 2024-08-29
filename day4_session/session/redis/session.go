@@ -29,7 +29,7 @@ func (s *Session) Set(ctx context.Context, key string, value interface{}) error 
 		return -1
 	end
 	`
-	res, err := s.client.Eval(ctx, lua, []string{s.id}, key, value).Int()
+	res, err := s.client.Eval(ctx, lua, []string{s.redisKey}, key, value).Int()
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (s *Session) Get(ctx context.Context, key string) (interface{}, error) {
 	/*
 		如果要检查session是否过期，需要在此处使用lua脚本检查
 	*/
-	val, err := s.client.HGet(ctx, s.id, key).Result() // 没判断是否过期；如果过期了，就get不到; 用户使用差异不大
+	val, err := s.client.HGet(ctx, redisKey, key).Result() // 没判断是否过期；如果过期了，就get不到; 用户使用差异不大
 	return val, err
 }
 

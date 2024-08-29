@@ -2,10 +2,11 @@ package day4_session
 
 import (
 	__template_and_file "geektime-go/day3_template_and_file"
+	"geektime-go/day4_session/session"
 	"net/http"
 )
 
-var m manager
+var m session.Manager
 
 func RunSession() {
 	m.CtxSessionKey = "_session"

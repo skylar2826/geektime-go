@@ -1,4 +1,4 @@
-package day4_session
+package session
 
 import (
 	"context"

@@ -1,17 +1,18 @@
-package day4_session
+package session
 
 import (
 	__template_and_file "geektime-go/day3_template_and_file"
+
 	"github.com/google/uuid"
 )
 
-type manager struct {
+type Manager struct {
 	Propagator
 	Store
 	CtxSessionKey string
 }
 
-func (m *manager) GetSession(c *__template_and_file.Context) (Session, error) {
+func (m *Manager) GetSession(c *__template_and_file.Context) (Session, error) {
 	/*
 		频繁读取redis中的session => 尝试缓存住数据 => 只能缓存在context中
 	*/
@@ -37,7 +38,7 @@ func (m *manager) GetSession(c *__template_and_file.Context) (Session, error) {
 	return session.(Session), err
 }
 
-func (m *manager) InitSession(c *__template_and_file.Context) (Session, error) {
+func (m *Manager) InitSession(c *__template_and_file.Context) (Session, error) {
 	sessionId := uuid.New().String()
 	session, err := m.Generator(c.R.Context(), sessionId)
 	if err != nil {
@@ -47,7 +48,7 @@ func (m *manager) InitSession(c *__template_and_file.Context) (Session, error) {
 	return session, err
 }
 
-func (m *manager) RemoveSession(c *__template_and_file.Context) error {
+func (m *Manager) RemoveSession(c *__template_and_file.Context) error {
 	//sessionId, err := m.Extract(c.R)
 	session, err := m.GetSession(c)
 	if err != nil {
@@ -60,7 +61,7 @@ func (m *manager) RemoveSession(c *__template_and_file.Context) error {
 	return m.Propagator.Remove(c.W)
 }
 
-func (m *manager) RefreshSession(c *__template_and_file.Context) error {
+func (m *Manager) RefreshSession(c *__template_and_file.Context) error {
 	session, err := m.GetSession(c)
 	if err != nil {
 		return err

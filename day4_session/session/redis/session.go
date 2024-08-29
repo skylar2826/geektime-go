@@ -34,7 +34,7 @@ func (s *Session) Set(ctx context.Context, key string, value interface{}) error 
 		return err
 	}
 	if res < 0 {
-		return errSessionNotFound
+		return fmt.Errorf("session: session创建失败")
 	}
 	return nil
 }

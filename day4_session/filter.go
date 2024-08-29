@@ -11,17 +11,19 @@ func SessionFilter(next __template_and_file.Filter) __template_and_file.Filter {
 			next(c)
 			return
 		}
-		_, err := m.GetSession(c)
+
+		sess, err := m.GetSession(c)
 		if err != nil {
-			c.RespUnAuthed(err)
+			c.RespUnAuthed()
 			return
 		}
 
-		// 刷新session的过期时间
-		err = m.RefreshSession(c)
+		// 刷新session
+		err = m.Refresh(c.R.Context(), sess.ID())
 		if err != nil {
-			log.Printf("session刷新失败: %v", err)
+			log.Println("刷新session失败", err)
 		}
+
 		next(c)
 	}
 }

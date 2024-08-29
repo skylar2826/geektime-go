@@ -9,10 +9,10 @@ import (
 var m session.Manager
 
 func RunSession() {
-	m.CtxSessionKey = "_session"
+
+	m.SessionKey = "_sess"
 	server := __template_and_file.NewServer("test-session", __template_and_file.ServerWithFilterBuilders(SessionFilter))
+	server.Route(http.MethodGet, "/user", handleUser)
 	server.Route(http.MethodPost, "/login", handleLogin)
-	server.Route(http.MethodGet, "/home", handleHome)
-	server.Route(http.MethodPost, "/logout", handleLogout)
-	server.Start("127.0.0.1:8000")
+	server.Route(http.MethodPost, '/logout', handleLogout)
 }

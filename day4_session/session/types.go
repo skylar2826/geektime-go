@@ -5,27 +5,23 @@ import (
 	"net/http"
 )
 
-// Store 管理session的创建、销毁
+// session 直接与内存|redis交互， 存储key|value键值对，有sessionId
+// 相当于二维Map  map[string]map[string]any   { sessionId: { key: value } }
+type Session interface {
+	ID() string // id是私有的，外部通过ID()获取
+	Get(ctx context.Context, key string) (interface{}, error)
+	Set(ctx context.Context, key string, value interface{}) error
+}
+
 type Store interface {
+	Get(ctx context.Context, id string) (Session, error)
 	Generator(ctx context.Context, id string) (Session, error)
 	Remove(ctx context.Context, id string) error
 	Refresh(ctx context.Context, id string) error
-	Get(ctx context.Context, id string) (Session, error)
 }
 
-// Session 基于内存的Session
-type Session interface {
-	Set(ctx context.Context, key string, value interface{}) error
-	Get(ctx context.Context, key string) (interface{}, error)
-	ID() string
-}
-
-// Propagator 操作http
 type Propagator interface {
-	// Inject 将session插入response
-	Inject(id string, w http.ResponseWriter) error
-	// Extract 在请求中获取sessionId
 	Extract(r *http.Request) (string, error)
-	// Remove 在response中删除session
+	Inject(id string, w http.ResponseWriter) error
 	Remove(w http.ResponseWriter) error
 }

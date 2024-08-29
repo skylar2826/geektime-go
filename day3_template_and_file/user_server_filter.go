@@ -150,7 +150,7 @@ func (f *FileUploader) Handle() HandlerFunc {
 			c.SystemError(err)
 			return
 		}
-		c.RequestOk("上传成功")
+		c.RespOk("上传成功")
 	}
 }
 

@@ -20,7 +20,7 @@ func (c *Context) SystemError() {
 	c.WriteJson(http.StatusInternalServerError, "Internal Server Error")
 }
 
-func (c *Context) RequestOk() {
+func (c *Context) RespOk() {
 	c.WriteJson(http.StatusOK, "OK")
 }
 

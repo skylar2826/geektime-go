@@ -100,6 +100,15 @@ func ServerWithTemplateEngine(tplEngine templateEngine) HttpServerOption {
 	}
 }
 
+// ServerWithFilterBuilders 插入中间件
+func ServerWithFilterBuilders(filterBuilders ...FilterBuilder) HttpServerOption {
+	return func(s *sdkHttpServer) {
+		for _, filter := range filterBuilders {
+			s.root = filter(s.root)
+		}
+	}
+}
+
 func NewServer(name string, options ...HttpServerOption) Server {
 	//handler := NewHandlerBasedOnMap()
 	handler := NewHandlerBasedOnTree()

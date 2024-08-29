@@ -21,6 +21,8 @@ type Context struct {
 	templateEngine templateEngine
 
 	queryValues url.Values
+
+	UserValues map[string]any
 }
 
 func (c *Context) Render(tagName string, data any) error {
@@ -50,12 +52,20 @@ func (c *Context) SystemError(v ...interface{}) {
 	c.WriteJson(http.StatusInternalServerError, respData)
 }
 
-func (c *Context) RequestOk(v ...interface{}) {
+func (c *Context) RespOk(v ...interface{}) {
 	var respData interface{} = "ok"
 	if len(v) > 0 && v[0] != nil {
 		respData = v
 	}
 	c.WriteJson(http.StatusOK, respData)
+}
+
+func (c *Context) RespUnAuthed(v ...interface{}) {
+	var respData interface{} = "请重新登录"
+	if len(v) > 0 && v[0] != nil {
+		respData = v
+	}
+	c.WriteJson(http.StatusUnauthorized, respData)
 }
 
 func (c *Context) NotFound() {

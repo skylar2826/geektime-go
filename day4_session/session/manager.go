@@ -58,6 +58,7 @@ func (m *Manager) RemoveSession(c *__template_and_file.Context) error {
 	if err != nil {
 		return err
 	}
+	delete(c.UserValues, m.CtxSessionKey)
 	return m.Propagator.Remove(c.W)
 }
 

@@ -1,7 +1,7 @@
-package day5_orm_select
+package day5_orm
 
 import (
-	"geektime-go/day5_orm_select/orm_mysql"
+	"geektime-go/day5_orm/orm_mysql"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/mattn/go-sqlite3"
 )

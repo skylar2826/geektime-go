@@ -2,7 +2,7 @@ package base_mysql
 
 import (
 	"database/sql"
-	day5_orm_select "geektime-go/day5_orm_select/types"
+	day5_orm_select "geektime-go/day5_orm/types"
 )
 
 func Query(db *sql.DB) ([]day5_orm_select.User, error) {

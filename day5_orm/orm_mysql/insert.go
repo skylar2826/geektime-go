@@ -1,7 +1,7 @@
 package orm_mysql
 
 import (
-	day5_orm_select "geektime-go/day5_orm_select/types"
+	day5_orm_select "geektime-go/day5_orm/types"
 	"github.com/astaxie/beego/orm"
 )
 

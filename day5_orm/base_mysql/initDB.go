@@ -3,7 +3,7 @@ package base_mysql
 import (
 	"database/sql"
 	"fmt"
-	day5_orm_select "geektime-go/day5_orm_select/types"
+	day5_orm_select "geektime-go/day5_orm/types"
 )
 
 func InitDB() (*sql.DB, error) {

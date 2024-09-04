@@ -1,46 +1,60 @@
 package reflect
 
-import "reflect"
+import (
+	"reflect"
+)
 
 func IterateFunc(entity any) (map[string]FuncInfo, error) {
+	/*
+		拿到实体上的方法
+		拿到输入类型， 输入值
+		拿到输出类型
+		fn.call(输入值) 拿到结果
+	*/
 	typ := reflect.TypeOf(entity)
 	numMethod := typ.NumMethod()
-
-	res := make(map[string]FuncInfo, numMethod)
+	methods := make(map[string]FuncInfo, numMethod)
 
 	for i := 0; i < numMethod; i++ {
 		method := typ.Method(i)
-		fn := method.Func
+		//fn := method.Func.Type()
 
-		numIn := fn.Type().NumIn()
-		input := make([]reflect.Type, 0, numIn) // 输入类型
+		//numIn := fn.NumIn()
+		numIn := method.Type.NumIn()
+		input := make([]reflect.Type, 0, numIn) // input类型
 		input = append(input, reflect.TypeOf(entity))
-		inputValues := make([]reflect.Value, 0, numIn) // 输入值
-		inputValues = append(inputValues, reflect.ValueOf(entity))
+		inputValue := make([]reflect.Value, 0, numIn) // input值
+		inputValue = append(inputValue, reflect.ValueOf(entity))
 		for j := 1; j < numIn; j++ {
-			fnInType := fn.Type().In(j)
-			input = append(input, fnInType)
-			inputValues = append(inputValues, reflect.Zero(fnInType))
+			//inputType := fn.In(j)
+			inputType := method.Type.In(j)
+			input = append(input, inputType)
+			inputValue = append(inputValue, reflect.Zero(inputType))
 		}
-		numOut := fn.Type().NumOut()
+
+		//numOut := fn.NumOut()
+		numOut := method.Type.NumOut()
 		output := make([]reflect.Type, 0, numOut)
 		for j := 0; j < numOut; j++ {
-			output = append(output, fn.Type().Out(j))
+			//output = append(output, fn.Out(j))
+			output = append(output, method.Type.Out(j))
 		}
 
-		resValues := fn.Call(inputValues)
-		result := make([]any, 0, len(resValues))
+		//resValues := method.Func.Call(inputValue)
+		resValues := method.Func.Call(inputValue)
+		res := make([]any, 0, len(resValues))
 		for _, resValue := range resValues {
-			result = append(result, resValue.Interface())
+			res = append(res, resValue.Interface())
 		}
-		res[method.Name] = FuncInfo{
+
+		methods[method.Name] = FuncInfo{
 			Name:        method.Name,
 			InputTypes:  input,
 			OutputTypes: output,
-			Result:      result,
+			Result:      res,
 		}
 	}
-	return res, nil
+	return methods, nil
 }
 
 type FuncInfo struct {

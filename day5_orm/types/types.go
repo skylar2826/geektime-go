@@ -60,3 +60,7 @@ type TestModel struct {
 	LastName  string
 	Age       int
 }
+
+type TableName interface {
+	TableName() string
+}

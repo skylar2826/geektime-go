@@ -1,5 +1,9 @@
 package main
 
+import (
+	"geektime-go/day5_orm"
+)
+
 func main() {
 	//__tree_router.RunTreeRouter()
 	//__shutdown.RunShutdown()
@@ -7,4 +11,5 @@ func main() {
 	//__template_and_file.RunTemplateAndFile()
 	//day4_session.RunSession()
 	day5_orm.RunORMSelect()
+
 }

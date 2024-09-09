@@ -53,3 +53,10 @@ func (u *TestUser) ChangeName(name string) {
 func (u TestUser) private() {
 	fmt.Println("private func")
 }
+
+type TestModel struct {
+	Id        string
+	FirstName string
+	LastName  string
+	Age       int
+}

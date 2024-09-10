@@ -2,6 +2,7 @@ package reflect
 
 import (
 	"fmt"
+	"geektime-go/day5_orm/internal"
 	types "geektime-go/day5_orm/types"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -54,7 +55,7 @@ func TestIterateFields(t *testing.T) {
 		{
 			name:    "err kind",
 			entity:  18,
-			wantErr: fmt.Errorf("entity kind must be struct, kind: int"),
+			wantErr: internal.ErrorEntityNotStruct,
 		},
 		{
 			name: "mutil ptr",
@@ -77,12 +78,12 @@ func TestIterateFields(t *testing.T) {
 		{
 			name:    "nil kind",
 			entity:  nil,
-			wantErr: fmt.Errorf("entity is nil"),
+			wantErr: internal.ErrorEntityNotStruct,
 		},
 		{
 			name:    "(*user)(nil)",
 			entity:  (*TestUser)(nil),
-			wantErr: fmt.Errorf("不支持零值"),
+			wantErr: fmt.Errorf("value is zero"),
 		},
 		{
 			name: "测试其他包的对象反射能不能拿到",
@@ -126,7 +127,7 @@ func TestSetField(t *testing.T) {
 			},
 			field:   "name",
 			value:   "zhuzhu",
-			wantErr: fmt.Errorf("不能修改"),
+			wantErr: internal.ErrorFieldCantSet,
 		},
 		{
 			name: "struct field",
@@ -136,7 +137,7 @@ func TestSetField(t *testing.T) {
 			},
 			field:   "Id",
 			value:   2,
-			wantErr: fmt.Errorf("不能修改"),
+			wantErr: internal.ErrorFieldCantSet,
 		},
 		{
 			name: "struct",

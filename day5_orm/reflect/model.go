@@ -1,7 +1,7 @@
 package reflect
 
 import (
-	"fmt"
+	"geektime-go/day5_orm/internal"
 	"geektime-go/day5_orm/types"
 	"reflect"
 	"regexp"
@@ -9,11 +9,10 @@ import (
 	"sync"
 )
 
-const (
+var (
 	tagName = "column"
 )
 
-// 元数据注册中心
 type Register struct {
 	models sync.Map
 }
@@ -24,42 +23,30 @@ func NewRegister() *Register {
 	}
 }
 
-func (r *Register) get(val any) (*Model, error) {
-	typ := reflect.TypeOf(val)
+type Model struct {
+	TableName string
+	Fields    map[string]*Field
+}
 
-	m, ok := r.models.Load(typ.String())
-	//m, ok := r.models[typ]
-	if !ok {
-		var err error
-		// 多个goroutine 都会进来会有第二个goroutine覆盖前一个的问题，会重复解析和store
-		// 刚启动的使用有轻微的覆盖问题，但map的性能比double-check好
-		m, err = r.ParseModel(val)
-		if err != nil {
-			return nil, err
-		}
-		// 普通map并发场景下会有读写问题
-		//r.models[typ] = m
-		r.models.Store(typ.String(), m)
-	}
-	return m.(*Model), nil
+type Field struct {
+	ColName string
 }
 
 func (r *Register) ParseModel(entity any) (*Model, error) {
 	if entity == nil {
-		return nil, fmt.Errorf("entity is nil")
+		return nil, internal.ErrorEntityIsNil
 	}
 	typ := reflect.TypeOf(entity)
 
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
-
 	}
+
 	if typ.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("entity is not a struct")
+		return nil, internal.ErrorEntityNotStruct
 	}
 
 	var tableName string
-	// 有类型断言的地方，指针和struct的测试用例都要写
 	if tbl, ok := entity.(types.TableName); ok {
 		tableName = tbl.TableName()
 	}
@@ -68,137 +55,80 @@ func (r *Register) ParseModel(entity any) (*Model, error) {
 	}
 
 	numFields := typ.NumField()
-
-	res := &Model{
-		TableName: tableName,
-		Fields:    make(map[string]*field, numFields),
-	}
-
+	fields := make(map[string]*Field, numFields)
 	for i := 0; i < numFields; i++ {
+		field := typ.Field(i)
 
-		fld := typ.Field(i)
-		pair, err := r.ParseTag(fld.Tag)
+		tagPair, err := r.parseTag(field.Tag)
 		if err != nil {
 			return nil, err
 		}
-		columnName := pair[tagName]
-		if columnName == "" {
-			columnName = CamelToSnake(fld.Name)
+		fieldName := tagPair[tagName]
+		if fieldName == "" {
+			fieldName = CamelToSnake(field.Name)
 		}
-		res.Fields[fld.Name] = &field{
-			ColName: columnName,
+
+		fields[field.Name] = &Field{
+			ColName: fieldName,
 		}
 	}
-	return res, nil
+
+	m := &Model{
+		TableName: tableName,
+		Fields:    fields,
+	}
+
+	return m, nil
 }
 
-//
-//type User struct {
-//	id int `orm:"column=id;xxx=x"`
-//}
+type User struct {
+	Id string `orm:"column=uid;xxx=x"`
+}
 
-//column=id => {column: id}
-
-func (r *Register) ParseTag(tag reflect.StructTag) (map[string]string, error) {
-	ormTag := tag.Get("orm")
-	if ormTag == "" {
+func (r *Register) parseTag(tag reflect.StructTag) (map[string]string, error) {
+	val, ok := tag.Lookup("orm")
+	if !ok {
 		return map[string]string{}, nil
 	}
 
-	res := make(map[string]string, 1)
-	pairs := strings.Split(ormTag, ",")
+	res := map[string]string{}
+	pairs := strings.Split(val, ";")
 	for _, pair := range pairs {
 		kv := strings.Split(pair, "=")
 		if len(kv) != 2 {
-			return nil, fmt.Errorf("orm tag format error")
+			return map[string]string{}, internal.ErrorTagFormat
 		}
 		res[kv[0]] = kv[1]
 	}
 	return res, nil
 }
 
-type Model struct {
-	TableName string
-	Fields    map[string]*field
+func (r *Register) get(val any) (*Model, error) {
+	typ := reflect.TypeOf(val)
+
+	//model, ok := r.models[typ]
+	model, ok := r.models.Load(typ)
+	if !ok {
+		var err error
+		model, err = r.ParseModel(val)
+		if err != nil {
+			return nil, err
+		}
+		//r.models[typ] = model
+		r.models.Store(typ, model)
+	}
+
+	return model.(*Model), nil
 }
 
-type field struct {
-	ColName string
-}
-
+// CamelToSnake FirstName => first_name
 func CamelToSnake(s string) string {
-	// str.replace(/([A-Z])/g, "_$1").toLowerCase().slice(1)
-	replaced := regexp.MustCompile(`([A-Z])`).ReplaceAllStringFunc(s, func(m string) string {
+	res := regexp.MustCompile(`([A-Z])`).ReplaceAllStringFunc(s, func(m string) string {
 		return "_" + strings.ToLower(m)
 	})
 
-	if len(replaced) != 0 && replaced[0] == '_' {
-		replaced = replaced[1:]
+	if len(res) != 0 && res[0] == '_' {
+		res = res[1:]
 	}
-
-	return replaced
-}
-
-// double check
-
-// 元数据注册中心
-type RegisterV1 struct {
-	models map[reflect.Type]*Model
-	lock   sync.RWMutex
-}
-
-func (r *RegisterV1) getV1(val any) (*Model, error) {
-	typ := reflect.TypeOf(val)
-
-	r.lock.RLock()
-	m, ok := r.models[typ]
-	r.lock.RUnlock()
-
-	if ok {
-		return m, nil
-	}
-
-	r.lock.Lock()
-	m, ok = r.models[typ]
-	if ok {
-		return m, nil
-	}
-	var err error
-	m, err = r.ParseModel(val)
-	if err != nil {
-		return nil, err
-	}
-	r.models[typ] = m
-
-	defer r.lock.Unlock()
-	return m, nil
-}
-func (r *RegisterV1) ParseModel(entity any) (*Model, error) {
-	if entity == nil {
-		return nil, fmt.Errorf("entity is nil")
-	}
-	typ := reflect.TypeOf(entity)
-
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-
-	}
-	if typ.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("entity is not a struct")
-	}
-
-	numFields := typ.NumField()
-
-	res := &Model{
-		TableName: CamelToSnake(typ.Name()),
-		Fields:    make(map[string]*field, numFields),
-	}
-
-	for i := 0; i < numFields; i++ {
-		fld := typ.Field(i)
-		res.Fields[fld.Name] = &field{
-			ColName: CamelToSnake(fld.Name),
-		}
-	}
-	return res, nil
+	return res
 }

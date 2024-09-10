@@ -1,56 +1,53 @@
 package reflect
 
 import (
-	"fmt"
+	internal "geektime-go/day5_orm/internal"
 	"reflect"
 )
 
 func IterateFields(entity any) (map[string]any, error) {
-	// typ是nil,但val不是nil
-	if entity == nil {
-		return nil, fmt.Errorf("entity is nil")
-	}
 	typ := reflect.TypeOf(entity)
 	val := reflect.ValueOf(entity)
-	if val.IsZero() { // 对象占据的内存空间都是0
-		return nil, fmt.Errorf("不支持零值")
+	if val.IsZero() {
+		return nil, internal.ErrorValueIsZero
 	}
 
-	// 如果是if仅支持*User, for支持多级指针 **User
-	for typ.Kind() == reflect.Pointer {
+	for typ.Kind() == reflect.Ptr {
+		// *User
 		typ = typ.Elem()
+		// (*User)(nil)
 		val = val.Elem()
 	}
 
 	if typ.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("entity kind must be struct, kind: %v", typ.Kind())
+		return nil, internal.ErrorEntityNotStruct
 	}
 
-	num := typ.NumField()
-	res := make(map[string]any, num)
+	numField := typ.NumField()
 
-	for i := 0; i < num; i++ {
-		field := typ.Field(i)      // 字段信息
-		fieldValue := val.Field(i) // 值信息
-		if field.IsExported() {
-			res[field.Name] = fieldValue.Interface()
+	res := make(map[string]any, numField)
+	for i := 0; i < numField; i++ {
+		fld := typ.Field(i)
+		if fld.IsExported() {
+			res[fld.Name] = val.Field(i).Interface()
 		} else {
-			res[field.Name] = reflect.Zero(field.Type).Interface()
+			res[fld.Name] = reflect.Zero(fld.Type).Interface()
 		}
 	}
+
 	return res, nil
 }
 
 func SetField(entity any, field string, value any) error {
 	val := reflect.ValueOf(entity)
-	// val.type.Kind
 	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 	val = val.FieldByName(field)
 	if !val.CanSet() {
-		return fmt.Errorf("不能修改")
+		return internal.ErrorFieldCantSet
 	}
 	val.Set(reflect.ValueOf(value))
+
 	return nil
 }

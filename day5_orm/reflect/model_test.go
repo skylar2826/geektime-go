@@ -18,7 +18,7 @@ func TestModels(t *testing.T) {
 			entity: types.TestModel{},
 			wantRes: &Model{
 				TableName: "test_model",
-				Fields: map[string]*field{
+				Fields: map[string]*Field{
 					"Id": {
 						ColName: "id",
 					},
@@ -92,7 +92,7 @@ func TestRegister_get(t *testing.T) {
 			cacheSize: 1,
 			wantRes: &Model{
 				TableName: "test_model",
-				Fields: map[string]*field{
+				Fields: map[string]*Field{
 					"Id": {
 						ColName: "id",
 					},
@@ -148,7 +148,7 @@ func TestRegister_tag(t *testing.T) {
 
 			wantRes: &Model{
 				TableName: "tag_table",
-				Fields: map[string]*field{
+				Fields: map[string]*Field{
 
 					"FirstName": {
 						ColName: "first_name_t",
@@ -195,7 +195,7 @@ func TestRegister_tableName(t *testing.T) {
 			entity: customUserName1{},
 			wantRes: &Model{
 				TableName: "custom_user_name1",
-				Fields: map[string]*field{
+				Fields: map[string]*Field{
 					"FirstName": {
 						ColName: "first_name",
 					},
@@ -207,7 +207,7 @@ func TestRegister_tableName(t *testing.T) {
 			entity: customUserName{},
 			wantRes: &Model{
 				TableName: "custom_table",
-				Fields: map[string]*field{
+				Fields: map[string]*Field{
 					"FirstName": {
 						ColName: "first_name",
 					},
@@ -219,7 +219,7 @@ func TestRegister_tableName(t *testing.T) {
 			entity: &customUserName{},
 			wantRes: &Model{
 				TableName: "custom_table",
-				Fields: map[string]*field{
+				Fields: map[string]*Field{
 					"FirstName": {
 						ColName: "first_name",
 					},

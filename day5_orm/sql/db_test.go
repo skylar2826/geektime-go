@@ -3,7 +3,9 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"geektime-go/day5_orm/types"
+	"github.com/DATA-DOG/go-sqlmock"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 	"log"
@@ -71,4 +73,42 @@ CREATE TABLE IF NOT EXISTS test_model(
 	require.Error(t, err, sql.ErrNoRows)
 	cancel()
 
+	// 处理事物
+	//var tx *sql.Tx
+	//tx, err = db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	//if tx != nil {
+	//	res, err = tx.ExecContext(ctx, `select * from test_model where id=?`, 1)
+	//	if err != nil {
+	//		err = tx.Rollback()
+	//		if err != nil {
+	//			log.Fatal(err)
+	//		}
+	//	}
+	//	err = tx.Commit()
+	//}
+
+}
+
+func TestMockDB(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	defer db.Close()
+	require.NoError(t, err)
+
+	mockRows := sqlmock.NewRows([]string{"id", "first_name", "age", "last_name"})
+	mockRows.AddRow(1, "Tom", 18, "xi")
+	mock.ExpectQuery("select id from `test_model`").WillReturnRows(mockRows)
+	mock.ExpectQuery("select id from `user`.*").WillReturnError(errors.New("mock error"))
+
+	var rows *sql.Rows
+	rows, err = db.QueryContext(context.Background(), "select id from `test_model`")
+	require.NoError(t, err)
+	for rows.Next() {
+		tm := &types.TestModel{}
+		err = rows.Scan(&tm.Id, &tm.FirstName, &tm.Age, &tm.LastName)
+		require.NoError(t, err)
+		log.Println("tm", tm)
+	}
+
+	rows, err = db.QueryContext(context.Background(), "select * from test_model")
+	require.Error(t, err)
 }

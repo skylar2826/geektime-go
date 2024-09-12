@@ -9,4 +9,5 @@ var (
 	ErrorFieldCantSet    = errors.New("field can't set")
 	ErrorEntityIsNil     = errors.New("entity is nil")
 	ErrorTagFormat       = errors.New("tag format error")
+	ErrorNoRows          = errors.New("no rows")
 )

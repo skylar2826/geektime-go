@@ -25,11 +25,14 @@ func NewRegister() *Register {
 
 type Model struct {
 	TableName string
-	Fields    map[string]*Field
+	FieldMap  map[string]*Field
+	ColumnMap map[string]*Field
 }
 
 type Field struct {
 	ColName string
+	Typ     reflect.Type
+	GoName  string
 }
 
 func (r *Register) ParseModel(entity any) (*Model, error) {
@@ -55,7 +58,8 @@ func (r *Register) ParseModel(entity any) (*Model, error) {
 	}
 
 	numFields := typ.NumField()
-	fields := make(map[string]*Field, numFields)
+	FieldMap := make(map[string]*Field, numFields)
+	ColumnMap := make(map[string]*Field, numFields)
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
 
@@ -68,14 +72,18 @@ func (r *Register) ParseModel(entity any) (*Model, error) {
 			fieldName = CamelToSnake(field.Name)
 		}
 
-		fields[field.Name] = &Field{
+		FieldMap[field.Name] = &Field{
 			ColName: fieldName,
+			Typ:     field.Type,
+			GoName:  field.Name,
 		}
+		ColumnMap[fieldName] = FieldMap[field.Name]
 	}
 
 	m := &Model{
 		TableName: tableName,
-		Fields:    fields,
+		FieldMap:  FieldMap,
+		ColumnMap: ColumnMap,
 	}
 
 	return m, nil

@@ -59,7 +59,7 @@ func (s *Builder) buildExpression(expr Expression, model *rft.Model) error {
 		}
 	case Column:
 		s.sb.WriteByte('`')
-		name, ok := model.Fields[exp.name]
+		name, ok := model.FieldMap[exp.name]
 		if !ok {
 			return fmt.Errorf("field %s not found", exp.name)
 		}

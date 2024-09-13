@@ -3,7 +3,7 @@ package valuer
 import (
 	"database/sql"
 	"database/sql/driver"
-	rft "geektime-go/day5_orm/reflect"
+	rft "geektime-go/day5_orm/model"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
 	"testing"

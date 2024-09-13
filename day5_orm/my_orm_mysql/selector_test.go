@@ -23,7 +23,7 @@ type TestModel struct {
 }
 
 func TestSelector(t *testing.T) {
-	db, err := rft.Open("", "")
+	db, err := rft.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
 	require.NoError(t, err)
 	testCases := []struct {
 		name      string
@@ -191,6 +191,151 @@ func TestSelector_Get(t *testing.T) {
 				return
 			}
 			assert.Equal(t, tc.wantRes, res)
+		})
+	}
+}
+
+// 要全部一起跑，不然sqlmock配对有问题
+func TestSelector_GetMulti(t *testing.T) {
+	mockDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	db, err := rft.OpenDB(mockDB)
+	require.NoError(t, err)
+
+	rows := sqlmock.NewRows([]string{"id", "first_name", "age", "last_name"})
+	rows.AddRow("1", "Tom", "18", "lili")
+	rows.AddRow("2", "xx", "8", "sss")
+	mock.ExpectQuery("select .* from `test_model` where .*").WillReturnRows(rows)
+
+	testCases := []struct {
+		name    string
+		s       *Selector[TestModel]
+		wantErr error
+		wantRes []*TestModel
+	}{
+
+		{
+			name: "muti row",
+			s:    NewSelector[TestModel](db).Where(C("Id").Eq(1)),
+			wantRes: []*TestModel{&TestModel{
+				Id:        1,
+				FirstName: "Tom",
+				Age:       18,
+				LastName:  &sql.NullString{Valid: true, String: "lili"},
+			}, &TestModel{
+				Id:        2,
+				FirstName: "xx",
+				Age:       8,
+				LastName:  &sql.NullString{Valid: true, String: "sss"},
+			}},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := tc.s.GetMulti(context.Background())
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.wantRes, res)
+		})
+	}
+}
+
+func TestSelector_Select(t *testing.T) {
+	mockDB, _, err := sqlmock.New()
+	require.NoError(t, err)
+	db, err := rft.OpenDB(mockDB)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name    string
+		s       *Selector[TestModel]
+		wantRes *Query
+		wantErr error
+	}{
+		{
+			name:    "invalid",
+			s:       NewSelector[TestModel](db).Select(C("invalid")),
+			wantErr: fmt.Errorf("field invalid not found"),
+		},
+		{
+			name: "select",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age")),
+			wantRes: &Query{
+				SQL: "select `first_name`,`age` from `test_model`;",
+			},
+		},
+		{
+			name: "select alias",
+			s:    NewSelector[TestModel](db).Select(C("FirstName").AS("AAA"), C("Age")),
+			wantRes: &Query{
+				SQL: "select `first_name` AS `AAA`,`age` from `test_model`;",
+			},
+		},
+		{
+			name: "select *",
+			s:    NewSelector[TestModel](db),
+			wantRes: &Query{
+				SQL: "select * from `test_model`;",
+			},
+		},
+		{
+			name: "select avg",
+			s:    NewSelector[TestModel](db).Select(Avg("FirstName")),
+			wantRes: &Query{
+				SQL: "select AVG(`FirstName`) from `test_model`;",
+			},
+		},
+		{
+			name: "select avg",
+			s:    NewSelector[TestModel](db).Select(Avg("FirstName").AS("AAA")),
+			wantRes: &Query{
+				SQL: "select AVG(`FirstName`) AS `AAA` from `test_model`;",
+			},
+		},
+		{
+			name: "select multi avg",
+			s:    NewSelector[TestModel](db).Select(Avg("FirstName"), Avg("age")),
+			wantRes: &Query{
+				SQL: "select AVG(`FirstName`),AVG(`age`) from `test_model`;",
+			},
+		},
+		{
+			name: "select rawExpr",
+			s:    NewSelector[TestModel](db).Select(Raw("COUNT(DISTINCT `first_name`)")),
+			wantRes: &Query{
+				SQL: "select COUNT(DISTINCT `first_name`) from `test_model`;",
+			},
+		},
+		{
+			name: "where rawExpr",
+			s:    NewSelector[TestModel](db).Where(Raw("id < ?", 18).AsPredicate()),
+			wantRes: &Query{
+				SQL:  "select * from `test_model` where (id < ?);",
+				Args: []any{18},
+			},
+		},
+		{
+			name: "where rawExpr used in predicate",
+			s:    NewSelector[TestModel](db).Where(C("Id").Eq(Raw("`age` < ?", 18))),
+			wantRes: &Query{
+				SQL:  "select * from `test_model` where `id` = (`age` < ?);",
+				Args: []any{18},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run(tc.name, func(t *testing.T) {
+				res, err := tc.s.Build()
+				assert.Equal(t, tc.wantErr, err)
+				if err != nil {
+					return
+				}
+				assert.Equal(t, tc.wantRes, res)
+			})
 		})
 	}
 }

@@ -1,7 +1,7 @@
 package my_orm_mysql
 
 import (
-	rft "geektime-go/day5_orm/reflect"
+	rft "geektime-go/day5_orm/model"
 	"strings"
 )
 

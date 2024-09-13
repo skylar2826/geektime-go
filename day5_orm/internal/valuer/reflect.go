@@ -2,7 +2,7 @@ package valuer
 
 import (
 	"database/sql"
-	rft "geektime-go/day5_orm/reflect"
+	rft "geektime-go/day5_orm/model"
 	"reflect"
 )
 

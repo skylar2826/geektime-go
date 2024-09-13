@@ -4,18 +4,25 @@ import (
 	"context"
 	"database/sql"
 	"geektime-go/day5_orm/internal"
-	"geektime-go/day5_orm/internal/valuer"
+	model2 "geektime-go/day5_orm/model"
 	rft "geektime-go/day5_orm/reflect"
 	"strings"
 )
 
+// Selectable 是一个标记接口
+// 它代表要查找的列或者聚合方法
+type Selectable interface {
+	selectable()
+}
+
 type Selector[T any] struct {
 	table string
 	where []Predicate
-	model *rft.Model
+	model *model2.Model
 	Builder
 	//r *rft.Register
-	db *rft.DB
+	db      *rft.DB
+	columns []Selectable
 }
 
 func NewSelector[T any](db *rft.DB) *Selector[T] {
@@ -33,7 +40,11 @@ func (s *Selector[T]) Build() (*Query, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.sb.WriteString("select * from ")
+	s.sb.WriteString("select ")
+	if err = s.BuildColumns(s.columns, s.model); err != nil {
+		return nil, err
+	}
+	s.sb.WriteString(" from ")
 
 	if s.table != "" {
 		s.sb.WriteString(s.table)
@@ -76,8 +87,7 @@ func (s *Selector[T]) GetV1(ctx context.Context) (*T, error) {
 	}
 
 	tp := new(T)
-	var creator valuer.Creator
-	v := creator(tp)
+	v := s.db.Creator(s.model, tp)
 	//var valuer valuer2.Valuer
 	err = v.SetColumns(rows)
 	return tp, err
@@ -100,8 +110,7 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 	}
 
 	tp := new(T)
-	var creator valuer.Creator
-	v := creator(tp)
+	v := s.db.Creator(s.model, tp)
 	err = v.SetColumns(rows)
 	if err != nil {
 		return nil, err
@@ -110,17 +119,29 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 }
 
 func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
-	//q, err := s.Build()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//var rows *sql.Rows
-	//rows, err = s.db.DB.QueryContext(ctx, q.SQL, q.Args)
-	//if err != nil {
-	//	return nil, err
-	//}
-	panic("implement me")
+	q, err := s.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	var rows *sql.Rows
+	rows, err = s.db.DB.QueryContext(ctx, q.SQL, q.Args...)
+	if err != nil {
+		return nil, err
+	}
+
+	var tps []*T
+	for rows.Next() {
+		tp := new(T)
+		v := s.db.Creator(s.model, tp)
+		err = v.SetColumns(rows)
+		if err != nil {
+			return nil, err
+		}
+
+		tps = append(tps, tp)
+	}
+	return tps, nil
 }
 
 func (s *Selector[T]) From(table string) *Selector[T] {
@@ -133,5 +154,10 @@ func (s *Selector[T]) Where(f ...Predicate) *Selector[T] {
 		s.where = make([]Predicate, 0, len(f))
 	}
 	s.where = append(s.where, f...)
+	return s
+}
+
+func (s *Selector[T]) Select(field ...Selectable) *Selector[T] {
+	s.columns = field
 	return s
 }

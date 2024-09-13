@@ -32,13 +32,22 @@ type Predicate struct {
 func (Predicate) expr() {}
 
 type Column struct {
-	name string
+	name  string
+	alias string
 }
 
-func (Column) expr() {}
+func (c Column) AS(name string) Column {
+	return Column{
+		name:  c.name,
+		alias: name,
+	}
+}
+
+func (Column) expr()       {}
+func (Column) selectable() {}
 
 func C(name string) Column {
-	return Column{name}
+	return Column{name: name}
 }
 
 type value struct {
@@ -52,7 +61,16 @@ func (c Column) Eq(arg any) Predicate {
 	return Predicate{
 		left:  c,
 		op:    opEq,
-		right: value{val: arg},
+		right: valueOf(arg),
+	}
+}
+
+func valueOf(val any) Expression {
+	switch v := val.(type) {
+	case Expression:
+		return v
+	default:
+		return &value{val: v}
 	}
 }
 
@@ -77,5 +95,49 @@ func (left Predicate) Or(right Predicate) Predicate {
 		left:  left,
 		op:    opOr,
 		right: right,
+	}
+}
+
+type Aggregate struct {
+	fn    string
+	arg   string
+	alias string
+}
+
+func (Aggregate) selectable() {}
+
+func Avg(col string) Aggregate {
+	return Aggregate{
+		fn:  "AVG",
+		arg: col,
+	}
+}
+
+func (a Aggregate) AS(name string) Aggregate {
+	return Aggregate{
+		fn:    a.fn,
+		arg:   a.arg,
+		alias: name,
+	}
+}
+
+type RawExpr struct {
+	expression string
+	args       []any
+}
+
+func (RawExpr) expr()       {}
+func (RawExpr) selectable() {}
+
+func Raw(expr string, args ...any) RawExpr {
+	return RawExpr{
+		expression: expr,
+		args:       args,
+	}
+}
+
+func (r RawExpr) AsPredicate() Predicate {
+	return Predicate{
+		left: r,
 	}
 }

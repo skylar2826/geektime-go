@@ -1,4 +1,4 @@
-package reflect
+package model
 
 import (
 	"geektime-go/day5_orm/internal"

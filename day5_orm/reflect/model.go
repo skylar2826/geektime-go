@@ -14,7 +14,7 @@ var (
 )
 
 type Register struct {
-	models sync.Map
+	Models sync.Map
 }
 
 func NewRegister() *Register {
@@ -113,11 +113,11 @@ func (r *Register) parseTag(tag reflect.StructTag) (map[string]string, error) {
 	return res, nil
 }
 
-func (r *Register) get(val any) (*Model, error) {
+func (r *Register) Get(val any) (*Model, error) {
 	typ := reflect.TypeOf(val)
 
 	//model, ok := r.models[typ]
-	model, ok := r.models.Load(typ)
+	model, ok := r.Models.Load(typ)
 	if !ok {
 		var err error
 		model, err = r.ParseModel(val)
@@ -125,7 +125,7 @@ func (r *Register) get(val any) (*Model, error) {
 			return nil, err
 		}
 		//r.models[typ] = model
-		r.models.Store(typ, model)
+		r.Models.Store(typ, model)
 	}
 
 	return model.(*Model), nil

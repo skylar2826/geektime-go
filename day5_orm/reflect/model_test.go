@@ -112,7 +112,7 @@ func TestRegister_get(t *testing.T) {
 	for _, tc := range testCases {
 		r := NewRegister()
 		t.Run(tc.name, func(t *testing.T) {
-			m, err := r.get(tc.entity)
+			m, err := r.Get(tc.entity)
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return
@@ -160,7 +160,7 @@ func TestRegister_tag(t *testing.T) {
 	for _, tc := range testCases {
 		r := NewRegister()
 		t.Run(tc.name, func(t *testing.T) {
-			m, err := r.get(tc.entity)
+			m, err := r.Get(tc.entity)
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return
@@ -230,7 +230,7 @@ func TestRegister_tableName(t *testing.T) {
 	for _, tc := range testCases {
 		r := NewRegister()
 		t.Run(tc.name, func(t *testing.T) {
-			m, err := r.get(tc.entity)
+			m, err := r.Get(tc.entity)
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return

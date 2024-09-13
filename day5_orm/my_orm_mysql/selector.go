@@ -62,7 +62,6 @@ func (s *Selector[T]) Build() (*Query, error) {
 }
 
 func (s *Selector[T]) GetV1(ctx context.Context) (*T, error) {
-
 	q, err := s.Build()
 	if err != nil {
 		return nil, err
@@ -78,25 +77,23 @@ func (s *Selector[T]) GetV1(ctx context.Context) (*T, error) {
 		return nil, internal.ErrorNoRows
 	}
 
+	tp := new(T)
+	address := reflect.ValueOf(tp).UnsafePointer()
 	var cs []string
 	cs, err = rows.Columns()
+	var vals []any
 	if err != nil {
 		return nil, err
 	}
 
-	var vals []any
-	tp := new(T)
-	address := reflect.ValueOf(tp).UnsafePointer()
 	for _, c := range cs {
 		fd, ok := s.model.ColumnMap[c]
 		if !ok {
 			return nil, fmt.Errorf("column %s not found", c)
 		}
-
 		fdAddress := unsafe.Pointer(uintptr(address) + fd.Offset)
-
-		val := reflect.NewAt(fd.Typ, fdAddress)
-		vals = append(vals, val.Interface())
+		val := reflect.NewAt(fd.Typ, fdAddress).Interface()
+		vals = append(vals, val)
 	}
 
 	err = rows.Scan(vals...)
@@ -104,11 +101,10 @@ func (s *Selector[T]) GetV1(ctx context.Context) (*T, error) {
 		return nil, err
 	}
 
-	return tp, err
+	return tp, nil
 }
 
 func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
-
 	q, err := s.Build()
 	if err != nil {
 		return nil, err
@@ -126,17 +122,11 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 
 	var cs []string
 	cs, err = rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
 	var vals []any
+
 	for _, c := range cs {
-		// 反射创建一个实例
-		// 这里创建的实例是原本类型的指针类型
-		// 例如 fd.Type = int, 那么 val = *int
-		val := reflect.New(s.model.ColumnMap[c].Typ)
-		vals = append(vals, val.Interface())
+		val := reflect.New(s.model.ColumnMap[c].Typ).Interface()
+		vals = append(vals, val)
 	}
 
 	err = rows.Scan(vals...)
@@ -147,8 +137,8 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 	tp := new(T)
 	tpValueElem := reflect.ValueOf(tp).Elem()
 	for i, c := range cs {
-		field := s.model.ColumnMap[c]
-		tpValueElem.FieldByName(field.GoName).Set(reflect.ValueOf(vals[i]).Elem())
+		fd := s.model.ColumnMap[c]
+		tpValueElem.FieldByName(fd.GoName).Set(reflect.ValueOf(vals[i]).Elem())
 	}
 
 	return tp, err

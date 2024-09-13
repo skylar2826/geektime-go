@@ -3,10 +3,12 @@ package my_orm_mysql
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"geektime-go/day5_orm/internal"
 	rft "geektime-go/day5_orm/reflect"
 	"reflect"
 	"strings"
+	"unsafe"
 )
 
 type Selector[T any] struct {
@@ -57,6 +59,52 @@ func (s *Selector[T]) Build() (*Query, error) {
 		SQL:  s.sb.String(),
 		Args: s.args,
 	}, nil
+}
+
+func (s *Selector[T]) GetV1(ctx context.Context) (*T, error) {
+
+	q, err := s.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	var rows *sql.Rows
+	rows, err = s.db.DB.QueryContext(ctx, q.SQL, q.Args...)
+	if err != nil {
+		return nil, err
+	}
+
+	if !rows.Next() {
+		return nil, internal.ErrorNoRows
+	}
+
+	var cs []string
+	cs, err = rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	var vals []any
+	tp := new(T)
+	address := reflect.ValueOf(tp).UnsafePointer()
+	for _, c := range cs {
+		fd, ok := s.model.ColumnMap[c]
+		if !ok {
+			return nil, fmt.Errorf("column %s not found", c)
+		}
+
+		fdAddress := unsafe.Pointer(uintptr(address) + fd.Offset)
+
+		val := reflect.NewAt(fd.Typ, fdAddress)
+		vals = append(vals, val.Interface())
+	}
+
+	err = rows.Scan(vals...)
+	if err != nil {
+		return nil, err
+	}
+
+	return tp, err
 }
 
 func (s *Selector[T]) Get(ctx context.Context) (*T, error) {

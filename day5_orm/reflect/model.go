@@ -33,6 +33,7 @@ type Field struct {
 	ColName string
 	Typ     reflect.Type
 	GoName  string
+	Offset  uintptr
 }
 
 func (r *Register) ParseModel(entity any) (*Model, error) {
@@ -76,6 +77,7 @@ func (r *Register) ParseModel(entity any) (*Model, error) {
 			ColName: fieldName,
 			Typ:     field.Type,
 			GoName:  field.Name,
+			Offset:  field.Offset,
 		}
 		ColumnMap[fieldName] = FieldMap[field.Name]
 	}

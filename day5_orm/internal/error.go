@@ -10,4 +10,6 @@ var (
 	ErrorEntityIsNil     = errors.New("entity is nil")
 	ErrorTagFormat       = errors.New("tag format error")
 	ErrorNoRows          = errors.New("no rows")
+	ErrorInsertZeroRow   = errors.New("insert zero row")
+	ErrorFieldUnknown    = errors.New("field unknown")
 )

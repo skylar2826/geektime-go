@@ -27,6 +27,7 @@ type Model struct {
 	TableName string
 	FieldMap  map[string]*Field
 	ColumnMap map[string]*Field
+	Fields    []*Field
 }
 
 type Field struct {
@@ -61,6 +62,7 @@ func (r *Register) ParseModel(entity any) (*Model, error) {
 	numFields := typ.NumField()
 	FieldMap := make(map[string]*Field, numFields)
 	ColumnMap := make(map[string]*Field, numFields)
+	Fields := make([]*Field, 0, numFields)
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
 
@@ -80,12 +82,14 @@ func (r *Register) ParseModel(entity any) (*Model, error) {
 			Offset:  field.Offset,
 		}
 		ColumnMap[fieldName] = FieldMap[field.Name]
+		Fields = append(Fields, FieldMap[field.Name])
 	}
 
 	m := &Model{
 		TableName: tableName,
 		FieldMap:  FieldMap,
 		ColumnMap: ColumnMap,
+		Fields:    Fields,
 	}
 
 	return m, nil

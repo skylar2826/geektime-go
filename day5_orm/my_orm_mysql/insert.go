@@ -1,6 +1,7 @@
 package my_orm_mysql
 
 import (
+	"fmt"
 	"geektime-go/day5_orm/internal"
 	"geektime-go/day5_orm/model"
 	rft "geektime-go/day5_orm/reflect"
@@ -8,11 +9,44 @@ import (
 	"strings"
 )
 
+// Assignable 标记接口 用于 update 和 upset中
+type Assignable interface {
+	assign()
+}
+
+type OnDuplicateKey[T any] struct {
+	assigns []Assignable
+}
+
+type OnDuplicateKeyBuilder[T any] struct {
+	i *Insert[T]
+}
+
+func (o *OnDuplicateKeyBuilder[T]) Update(assigns ...Assignable) *Insert[T] {
+	o.i.onDuplicateKey = &OnDuplicateKey[T]{
+		assigns: assigns,
+	}
+	return o.i
+}
+
 type Insert[T any] struct {
 	db      *rft.DB
 	sb      strings.Builder
 	values  []*T
 	columns []string
+	//onDuplicateKey []Assignable
+	onDuplicateKey *OnDuplicateKey[T]
+}
+
+//func (i *Insert[T]) OnDuplicateKey(assigns ...Assignable) *Insert[T] {
+//	i.onDuplicateKey = assigns
+//	return i
+//}
+
+func (i *Insert[T]) OnDuplicateKey() *OnDuplicateKeyBuilder[T] {
+	return &OnDuplicateKeyBuilder[T]{
+		i: i,
+	}
 }
 
 func NewInsert[T any](db *rft.DB) *Insert[T] {
@@ -80,6 +114,39 @@ func (i *Insert[T]) Build() (*Query, error) {
 		i.sb.WriteString(")")
 
 	}
+
+	if i.onDuplicateKey != nil {
+		i.sb.WriteString(" ON DUPLICATE KEY UPDATE ")
+		for idx, assign := range i.onDuplicateKey.assigns {
+			if idx > 0 {
+				i.sb.WriteByte(',')
+			}
+
+			switch a := assign.(type) {
+			case Assignment:
+				i.sb.WriteString("`")
+				colName := m.FieldMap[a.column].ColName
+				i.sb.WriteString(colName)
+				i.sb.WriteString("`")
+				i.sb.WriteString("=?")
+				args = append(args, a.val)
+			case Column:
+				i.sb.WriteString("`")
+				colName := m.FieldMap[a.name].ColName
+				i.sb.WriteString(colName)
+				i.sb.WriteString("`")
+				i.sb.WriteString("=VALUES(")
+				i.sb.WriteString("`")
+				i.sb.WriteString(colName)
+				i.sb.WriteString("`")
+				i.sb.WriteString(")")
+			default:
+				return nil, fmt.Errorf("未知类型： %T", a)
+			}
+		}
+	}
+
+	i.sb.WriteString(";")
 
 	return &Query{
 		SQL:  i.sb.String(),

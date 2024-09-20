@@ -45,6 +45,7 @@ func (c Column) AS(name string) Column {
 
 func (Column) expr()       {}
 func (Column) selectable() {}
+func (Column) assign()     {}
 
 func C(name string) Column {
 	return Column{name: name}

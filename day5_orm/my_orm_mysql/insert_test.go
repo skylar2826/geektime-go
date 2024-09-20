@@ -41,7 +41,7 @@ func TestInsert_Build(t *testing.T) {
 				LastName:  &sql.NullString{Valid: true, String: "xi"},
 			}),
 			wantRes: &Query{
-				SQL:  "INSERT INTO `test_user`(`id`,`first_name`,`age`,`last_name`) VALUES (?,?,?,?)",
+				SQL:  "INSERT INTO `test_user`(`id`,`first_name`,`age`,`last_name`) VALUES (?,?,?,?);",
 				Args: []any{int64(1), "Tom", int8(18), &sql.NullString{Valid: true, String: "xi"}},
 			},
 		},
@@ -54,7 +54,7 @@ func TestInsert_Build(t *testing.T) {
 				LastName:  &sql.NullString{Valid: true, String: "xi"},
 			}),
 			wantRes: &Query{
-				SQL:  "INSERT INTO `test_user`(`first_name`,`age`) VALUES (?,?)",
+				SQL:  "INSERT INTO `test_user`(`first_name`,`age`) VALUES (?,?);",
 				Args: []any{"Tom", int8(18)},
 			},
 		},
@@ -72,8 +72,34 @@ func TestInsert_Build(t *testing.T) {
 				LastName:  &sql.NullString{Valid: true, String: "x"},
 			}),
 			wantRes: &Query{
-				SQL:  "INSERT INTO `test_user`(`id`,`first_name`,`age`,`last_name`) VALUES (?,?,?,?),(?,?,?,?)",
+				SQL:  "INSERT INTO `test_user`(`id`,`first_name`,`age`,`last_name`) VALUES (?,?,?,?),(?,?,?,?);",
 				Args: []any{int64(1), "Tom", int8(18), &sql.NullString{Valid: true, String: "xi"}, int64(12), "Tom1", int8(19), &sql.NullString{Valid: true, String: "x"}},
+			},
+		},
+		{
+			name: "insert assignment",
+			i: NewInsert[TestUser](db).Columns("FirstName", "Age").Values(&TestUser{
+				Id:        1,
+				FirstName: "Tom",
+				Age:       18,
+				LastName:  &sql.NullString{Valid: true, String: "xi"},
+			}).OnDuplicateKey().Update(Assign("FirstName", "lili"), Assign("Age", 88)),
+			wantRes: &Query{
+				SQL:  "INSERT INTO `test_user`(`first_name`,`age`) VALUES (?,?) ON DUPLICATE KEY UPDATE `first_name`=?,`age`=?;",
+				Args: []any{"Tom", int8(18), "lili", 88},
+			},
+		},
+		{
+			name: "insert column values",
+			i: NewInsert[TestUser](db).Columns("FirstName", "Age").Values(&TestUser{
+				Id:        1,
+				FirstName: "Tom",
+				Age:       18,
+				LastName:  &sql.NullString{Valid: true, String: "xi"},
+			}).OnDuplicateKey().Update(C("FirstName"), C("Age")),
+			wantRes: &Query{
+				SQL:  "INSERT INTO `test_user`(`first_name`,`age`) VALUES (?,?) ON DUPLICATE KEY UPDATE `first_name`=VALUES(`first_name`),`age`=VALUES(`age`);",
+				Args: []any{"Tom", int8(18)},
 			},
 		},
 	}

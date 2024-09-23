@@ -1,4 +1,4 @@
-package reflect
+package my_orm_mysql
 
 import (
 	"database/sql"
@@ -11,6 +11,7 @@ type DB struct {
 	R       *model.Register
 	DB      *sql.DB
 	Creator valuer.Creator
+	Dialect Dialect
 }
 
 type DBOpts func(db *DB)
@@ -24,12 +25,19 @@ func Open(driver string, datasourceName string, opts ...DBOpts) (*DB, error) {
 	return OpenDB(db, opts...)
 }
 
+func DBWithDialect(dialect Dialect) DBOpts {
+	return func(db *DB) {
+		db.Dialect = dialect
+	}
+}
+
 // OpenDB 支持单独传入db, 也方便单元测试
 func OpenDB(db *sql.DB, opts ...DBOpts) (*DB, error) {
 	res := &DB{
 		R:       model.NewRegister(),
 		DB:      db,
 		Creator: valuer.NewUnsafeValue,
+		Dialect: DialectMySql,
 	}
 	for _, opt := range opts {
 		opt(res)

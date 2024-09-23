@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"geektime-go/day5_orm/internal"
-	model2 "geektime-go/day5_orm/model"
-	rft "geektime-go/day5_orm/reflect"
 	"strings"
 )
 
@@ -18,15 +16,14 @@ type Selectable interface {
 type Selector[T any] struct {
 	table string
 	where []Predicate
-	model *model2.Model
 	Builder
 	//r *rft.Register
-	db      *rft.DB
+	db      *DB
 	columns []Selectable
 }
 
-func NewSelector[T any](db *rft.DB) *Selector[T] {
-	builder := NewBuilder()
+func NewSelector[T any](db *DB) *Selector[T] {
+	builder := NewBuilder(db)
 	return &Selector[T]{
 		db:      db,
 		Builder: *builder,
@@ -41,7 +38,7 @@ func (s *Selector[T]) Build() (*Query, error) {
 		return nil, err
 	}
 	s.sb.WriteString("select ")
-	if err = s.BuildColumns(s.columns, s.model); err != nil {
+	if err = s.BuildColumns(s.columns); err != nil {
 		return nil, err
 	}
 	s.sb.WriteString(" from ")
@@ -49,15 +46,13 @@ func (s *Selector[T]) Build() (*Query, error) {
 	if s.table != "" {
 		s.sb.WriteString(s.table)
 	} else {
-		s.sb.WriteByte('`')
-		s.sb.WriteString(s.model.TableName)
-		s.sb.WriteByte('`')
+		s.quote(s.model.TableName)
 	}
 
 	if len(s.where) > 0 {
 		s.sb.WriteString(" where ")
 
-		if err := s.buildPredicate(s.where, s.model); err != nil {
+		if err := s.buildPredicate(s.where); err != nil {
 			return nil, err
 		}
 

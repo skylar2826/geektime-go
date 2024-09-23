@@ -1,12 +1,9 @@
 package my_orm_mysql
 
 import (
-	"fmt"
 	"geektime-go/day5_orm/internal"
 	"geektime-go/day5_orm/model"
-	rft "geektime-go/day5_orm/reflect"
 	"reflect"
-	"strings"
 )
 
 // Assignable 标记接口 用于 update 和 upset中
@@ -14,44 +11,49 @@ type Assignable interface {
 	assign()
 }
 
-type OnDuplicateKey[T any] struct {
-	assigns []Assignable
+type Upsert struct {
+	Assigns         []Assignable
+	conflictColumns []string
 }
 
-type OnDuplicateKeyBuilder[T any] struct {
-	i *Insert[T]
+type UpsertBuilder[T any] struct {
+	i               *Insert[T]
+	conflictColumns []string
 }
 
-func (o *OnDuplicateKeyBuilder[T]) Update(assigns ...Assignable) *Insert[T] {
-	o.i.onDuplicateKey = &OnDuplicateKey[T]{
-		assigns: assigns,
+func (o *UpsertBuilder[T]) Update(assigns ...Assignable) *Insert[T] {
+	o.i.upsert = &Upsert{
+		Assigns:         assigns,
+		conflictColumns: o.conflictColumns,
 	}
 	return o.i
 }
 
-type Insert[T any] struct {
-	db      *rft.DB
-	sb      strings.Builder
-	values  []*T
-	columns []string
-	//onDuplicateKey []Assignable
-	onDuplicateKey *OnDuplicateKey[T]
+// ConflictColumns 中间方法
+func (o *UpsertBuilder[T]) ConflictColumns(cols ...string) *UpsertBuilder[T] {
+	o.conflictColumns = cols
+	return o
 }
 
-//func (i *Insert[T]) OnDuplicateKey(assigns ...Assignable) *Insert[T] {
-//	i.onDuplicateKey = assigns
-//	return i
-//}
+type Insert[T any] struct {
+	db      *DB
+	values  []*T
+	columns []string
+	upsert  *Upsert
+	Builder
+}
 
-func (i *Insert[T]) OnDuplicateKey() *OnDuplicateKeyBuilder[T] {
-	return &OnDuplicateKeyBuilder[T]{
+func (i *Insert[T]) Upsert() *UpsertBuilder[T] {
+	return &UpsertBuilder[T]{
 		i: i,
 	}
 }
 
-func NewInsert[T any](db *rft.DB) *Insert[T] {
+func NewInsert[T any](db *DB) *Insert[T] {
+	builder := NewBuilder(db)
 	return &Insert[T]{
-		db: db,
+		db:      db,
+		Builder: *builder,
 	}
 }
 
@@ -59,6 +61,8 @@ func (i *Insert[T]) Build() (*Query, error) {
 	if len(i.values) == 0 {
 		return nil, internal.ErrorInsertZeroRow
 	}
+	var err error
+	i.model, err = i.db.R.ParseModel(new(T))
 	i.sb.WriteString("INSERT INTO ")
 
 	m, err := i.db.R.Get(i.values[0]) // new(T)
@@ -66,9 +70,7 @@ func (i *Insert[T]) Build() (*Query, error) {
 		return nil, err
 	}
 
-	i.sb.WriteByte('`')
-	i.sb.WriteString(m.TableName)
-	i.sb.WriteByte('`')
+	i.quote(m.TableName)
 
 	fields := m.Fields
 	if len(i.columns) > 0 {
@@ -87,15 +89,13 @@ func (i *Insert[T]) Build() (*Query, error) {
 		if idx > 0 {
 			i.sb.WriteByte(',')
 		}
-		i.sb.WriteByte('`')
-		i.sb.WriteString(field.ColName)
-		i.sb.WriteByte('`')
+		i.quote(field.ColName)
 	}
 	i.sb.WriteString(")")
 
 	i.sb.WriteString(" VALUES ")
 
-	args := make([]interface{}, 0, len(i.values)*len(fields))
+	i.args = make([]interface{}, 0, len(i.values)*len(fields))
 	for idx, row := range i.values {
 		if idx > 0 {
 			i.sb.WriteByte(',')
@@ -109,40 +109,16 @@ func (i *Insert[T]) Build() (*Query, error) {
 			}
 			i.sb.WriteString("?")
 			arg := reflect.ValueOf(row).Elem().FieldByName(field.GoName).Interface()
-			args = append(args, arg)
+			i.addArgs(arg)
 		}
 		i.sb.WriteString(")")
 
 	}
 
-	if i.onDuplicateKey != nil {
-		i.sb.WriteString(" ON DUPLICATE KEY UPDATE ")
-		for idx, assign := range i.onDuplicateKey.assigns {
-			if idx > 0 {
-				i.sb.WriteByte(',')
-			}
-
-			switch a := assign.(type) {
-			case Assignment:
-				i.sb.WriteString("`")
-				colName := m.FieldMap[a.column].ColName
-				i.sb.WriteString(colName)
-				i.sb.WriteString("`")
-				i.sb.WriteString("=?")
-				args = append(args, a.val)
-			case Column:
-				i.sb.WriteString("`")
-				colName := m.FieldMap[a.name].ColName
-				i.sb.WriteString(colName)
-				i.sb.WriteString("`")
-				i.sb.WriteString("=VALUES(")
-				i.sb.WriteString("`")
-				i.sb.WriteString(colName)
-				i.sb.WriteString("`")
-				i.sb.WriteString(")")
-			default:
-				return nil, fmt.Errorf("未知类型： %T", a)
-			}
+	if i.upsert != nil {
+		err = i.dialect.upsert(&i.Builder, i.upsert)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -150,7 +126,7 @@ func (i *Insert[T]) Build() (*Query, error) {
 
 	return &Query{
 		SQL:  i.sb.String(),
-		Args: args,
+		Args: i.args,
 	}, nil
 }
 

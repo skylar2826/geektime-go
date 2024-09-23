@@ -32,13 +32,13 @@ type Predicate struct {
 func (Predicate) expr() {}
 
 type Column struct {
-	name  string
+	Name  string
 	alias string
 }
 
 func (c Column) AS(name string) Column {
 	return Column{
-		name:  c.name,
+		Name:  c.Name,
 		alias: name,
 	}
 }
@@ -48,7 +48,7 @@ func (Column) selectable() {}
 func (Column) assign()     {}
 
 func C(name string) Column {
-	return Column{name: name}
+	return Column{Name: name}
 }
 
 type value struct {
@@ -71,7 +71,7 @@ func valueOf(val any) Expression {
 	case Expression:
 		return v
 	default:
-		return &value{val: v}
+		return value{val: v}
 	}
 }
 

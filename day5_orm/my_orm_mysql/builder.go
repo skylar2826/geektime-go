@@ -7,32 +7,43 @@ import (
 )
 
 type Builder struct {
-	sb   *strings.Builder
-	args []any
+	sb      *strings.Builder
+	args    []any
+	model   *rft.Model
+	dialect Dialect
+	quoter  byte
 }
 
-func NewBuilder() *Builder {
+func (s *Builder) quote(name string) {
+	s.sb.WriteByte(s.quoter)
+	s.sb.WriteString(name)
+	s.sb.WriteByte(s.quoter)
+}
+
+func NewBuilder(db *DB) *Builder {
 	return &Builder{
-		sb: &strings.Builder{},
+		sb:      &strings.Builder{},
+		dialect: db.Dialect,
+		quoter:  db.Dialect.quoter(),
 	}
 }
 
-func (s *Builder) buildPredicate(pd []Predicate, model *rft.Model) error {
+func (s *Builder) buildPredicate(pd []Predicate) error {
 	p := pd[0]
-	if err := s.buildExpression(p, model); err != nil {
+	if err := s.buildExpression(p); err != nil {
 		return err
 	}
 
 	for i := 1; i < len(pd); i++ {
 		p = p.And(pd[i])
-		if err := s.buildExpression(p, model); err != nil {
+		if err := s.buildExpression(p); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Builder) buildExpression(expr Expression, model *rft.Model) error {
+func (s *Builder) buildExpression(expr Expression) error {
 	switch exp := expr.(type) {
 	case nil: // 因为有default throw error, 所以Not左边没有是nil需要用case处理
 	case Predicate:
@@ -40,7 +51,7 @@ func (s *Builder) buildExpression(expr Expression, model *rft.Model) error {
 		if ok {
 			s.sb.WriteByte('(')
 		}
-		if err := s.buildExpression(exp.left, model); err != nil {
+		if err := s.buildExpression(exp.left); err != nil {
 			return err
 		}
 		if ok {
@@ -53,14 +64,14 @@ func (s *Builder) buildExpression(expr Expression, model *rft.Model) error {
 		if ok {
 			s.sb.WriteByte('(')
 		}
-		if err := s.buildExpression(exp.right, model); err != nil {
+		if err := s.buildExpression(exp.right); err != nil {
 			return err
 		}
 		if ok {
 			s.sb.WriteByte(')')
 		}
 	case Column:
-		err := s.buildColumn(exp, model)
+		err := s.buildColumn(exp)
 		if err != nil {
 			return err
 		}
@@ -78,14 +89,14 @@ func (s *Builder) buildExpression(expr Expression, model *rft.Model) error {
 	return nil
 }
 
-func (s *Builder) buildColumn(col Column, model *rft.Model) error {
-	s.sb.WriteByte('`')
-	name, ok := model.FieldMap[col.name]
+func (s *Builder) buildColumn(col Column) error {
+
+	name, ok := s.model.FieldMap[col.Name]
 	if !ok {
-		return fmt.Errorf("field %s not found", col.name)
+		return fmt.Errorf("field %s not found", col.Name)
 	}
-	s.sb.WriteString(name.ColName)
-	s.sb.WriteByte('`')
+
+	s.quote(name.ColName)
 	s.buildAs(col)
 
 	return nil
@@ -94,9 +105,7 @@ func (s *Builder) buildColumn(col Column, model *rft.Model) error {
 func (s *Builder) buildAs(col Column) {
 	if col.alias != "" {
 		s.sb.WriteString(" AS ")
-		s.sb.WriteString("`")
-		s.sb.WriteString(col.alias)
-		s.sb.WriteString("`")
+		s.quote(col.alias)
 	}
 }
 
@@ -111,7 +120,7 @@ func (s *Builder) addArgs(val ...any) *Builder {
 	return s
 }
 
-func (s *Builder) BuildColumns(columns []Selectable, model *rft.Model) error {
+func (s *Builder) BuildColumns(columns []Selectable) error {
 	if len(columns) == 0 {
 		s.sb.WriteString("*")
 		return nil
@@ -123,7 +132,7 @@ func (s *Builder) BuildColumns(columns []Selectable, model *rft.Model) error {
 		}
 		switch col := c.(type) {
 		case Column:
-			err := s.buildColumn(c.(Column), model)
+			err := s.buildColumn(c.(Column))
 			if err != nil {
 				return err
 			}
@@ -134,7 +143,7 @@ func (s *Builder) BuildColumns(columns []Selectable, model *rft.Model) error {
 			s.sb.WriteString(col.arg)
 
 			s.sb.WriteString("`)")
-			s.buildAs(Column{name: col.arg, alias: col.alias})
+			s.buildAs(Column{Name: col.arg, alias: col.alias})
 		case RawExpr:
 			s.sb.WriteString(col.expression)
 			s.addArgs(col.args...)

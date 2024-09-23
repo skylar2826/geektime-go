@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"geektime-go/day5_orm/internal"
-	rft "geektime-go/day5_orm/reflect"
 	"github.com/DATA-DOG/go-sqlmock"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -23,7 +23,7 @@ type TestModel struct {
 }
 
 func TestSelector(t *testing.T) {
-	db, err := rft.Open("sqlite3", "file:test.db?cache=shared&mode=memory")
+	db, err := Open("sqlite3", "file:test.db?cache=shared&mode=memory", DBWithDialect(DialectMySql))
 	require.NoError(t, err)
 	testCases := []struct {
 		name      string
@@ -134,7 +134,7 @@ func TestSelector(t *testing.T) {
 func TestSelector_Get(t *testing.T) {
 	mockDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	db, err := rft.OpenDB(mockDB)
+	db, err := OpenDB(mockDB)
 	require.NoError(t, err)
 
 	// mock与测试一对一，顺序不可变
@@ -199,7 +199,7 @@ func TestSelector_Get(t *testing.T) {
 func TestSelector_GetMulti(t *testing.T) {
 	mockDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	db, err := rft.OpenDB(mockDB)
+	db, err := OpenDB(mockDB)
 	require.NoError(t, err)
 
 	rows := sqlmock.NewRows([]string{"id", "first_name", "age", "last_name"})
@@ -245,7 +245,7 @@ func TestSelector_GetMulti(t *testing.T) {
 func TestSelector_Select(t *testing.T) {
 	mockDB, _, err := sqlmock.New()
 	require.NoError(t, err)
-	db, err := rft.OpenDB(mockDB)
+	db, err := OpenDB(mockDB)
 	require.NoError(t, err)
 
 	testCases := []struct {

@@ -1,9 +1,10 @@
 package my_orm_mysql
 
 import (
+	"context"
+	"database/sql"
 	"geektime-go/day5_orm/internal"
 	"geektime-go/day5_orm/model"
-	"reflect"
 )
 
 // Assignable 标记接口 用于 update 和 upset中
@@ -36,7 +37,7 @@ func (o *UpsertBuilder[T]) ConflictColumns(cols ...string) *UpsertBuilder[T] {
 }
 
 type Insert[T any] struct {
-	db      *DB
+	sess    Session
 	values  []*T
 	columns []string
 	upsert  *Upsert
@@ -49,10 +50,10 @@ func (i *Insert[T]) Upsert() *UpsertBuilder[T] {
 	}
 }
 
-func NewInsert[T any](db *DB) *Insert[T] {
-	builder := NewBuilder(db)
+func NewInsert[T any](sess Session) *Insert[T] {
+	builder := NewBuilder(sess)
 	return &Insert[T]{
-		db:      db,
+		sess:    sess,
 		Builder: *builder,
 	}
 }
@@ -62,10 +63,17 @@ func (i *Insert[T]) Build() (*Query, error) {
 		return nil, internal.ErrorInsertZeroRow
 	}
 	var err error
-	i.model, err = i.db.R.ParseModel(new(T))
+	if i.model == nil {
+		i.model, err = i.R.ParseModel(new(T))
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	i.sb.WriteString("INSERT INTO ")
 
-	m, err := i.db.R.Get(i.values[0]) // new(T)
+	var m *model.Model
+	m, err = i.R.Get(i.values[0]) // new(T)
 	if err != nil {
 		return nil, err
 	}
@@ -103,12 +111,15 @@ func (i *Insert[T]) Build() (*Query, error) {
 
 		i.sb.WriteString("(")
 
+		valuer := i.Creator(i.model, row)
 		for j, field := range fields {
 			if j > 0 {
 				i.sb.WriteByte(',')
 			}
 			i.sb.WriteString("?")
-			arg := reflect.ValueOf(row).Elem().FieldByName(field.GoName).Interface()
+			var arg any
+			arg, err = valuer.Field(field.GoName)
+			//arg := reflect.ValueOf(row).Elem().FieldByName(field.GoName).Interface()
 			i.addArgs(arg)
 		}
 		i.sb.WriteString(")")
@@ -138,4 +149,52 @@ func (i *Insert[T]) Values(vals ...*T) *Insert[T] {
 func (i *Insert[T]) Columns(cols ...string) *Insert[T] {
 	i.columns = cols
 	return i
+}
+
+var _ Handler = (&Insert[any]{}).ExecHandler
+
+func (i *Insert[T]) ExecHandler(ctx context.Context, qc *QueryContext) *QueryResult {
+	q, err := i.Build()
+	if err != nil {
+		return &QueryResult{Err: err}
+	}
+	var res sql.Result
+	res, err = i.sess.execContext(ctx, q.SQL, q.Args...)
+	return &QueryResult{
+		Result: res,
+		Err:    err,
+	}
+
+}
+
+func (i *Insert[T]) Exec(ctx context.Context) Result {
+	var err error
+	i.model, err = i.R.ParseModel(new(T))
+	if err != nil {
+		return Result{
+			err: err,
+		}
+	}
+
+	root := i.ExecHandler
+	for j := len(i.middlewares) - 1; j >= 0; j-- {
+		root = i.middlewares[j](root)
+	}
+
+	res := root(ctx, &QueryContext{
+		Type:    "Insert",
+		Builder: i,
+		Model:   i.model,
+	})
+
+	if res.Result != nil {
+		return Result{
+			res: res.Result.(*Result),
+		}
+	}
+
+	return Result{
+		err: res.Err,
+	}
+
 }

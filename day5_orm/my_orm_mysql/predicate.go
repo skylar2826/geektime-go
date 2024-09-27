@@ -15,6 +15,7 @@ var (
 	opNot op = "not"
 	opAnd op = "and"
 	opOr  op = "or"
+	opLt  op = "<"
 )
 
 // Expression 是标记接口，代表表达式;
@@ -51,17 +52,19 @@ func C(name string) Column {
 	return Column{Name: name}
 }
 
-type value struct {
-	val any
-}
-
-func (value) expr() {}
-
 // Eq C("id").Eq("5")
 func (c Column) Eq(arg any) Predicate {
 	return Predicate{
 		left:  c,
 		op:    opEq,
+		right: valueOf(arg),
+	}
+}
+
+func (c Column) Lt(arg any) Predicate {
+	return Predicate{
+		left:  c,
+		op:    opLt,
 		right: valueOf(arg),
 	}
 }
@@ -99,6 +102,12 @@ func (left Predicate) Or(right Predicate) Predicate {
 	}
 }
 
+type value struct {
+	val any
+}
+
+func (value) expr() {}
+
 type Aggregate struct {
 	fn    string
 	arg   string
@@ -106,6 +115,7 @@ type Aggregate struct {
 }
 
 func (Aggregate) selectable() {}
+func (Aggregate) expr()       {}
 
 func Avg(col string) Aggregate {
 	return Aggregate{
@@ -119,6 +129,22 @@ func (a Aggregate) AS(name string) Aggregate {
 		fn:    a.fn,
 		arg:   a.arg,
 		alias: name,
+	}
+}
+
+func (a Aggregate) Eq(arg any) Predicate {
+	return Predicate{
+		left:  a,
+		op:    opEq,
+		right: valueOf(arg),
+	}
+}
+
+func (a Aggregate) Lt(arg any) Predicate {
+	return Predicate{
+		left:  a,
+		op:    opLt,
+		right: valueOf(arg),
 	}
 }
 
@@ -140,5 +166,24 @@ func Raw(expr string, args ...any) RawExpr {
 func (r RawExpr) AsPredicate() Predicate {
 	return Predicate{
 		left: r,
+	}
+}
+
+type OrderBy struct {
+	col   Column
+	order string
+}
+
+func ASC(column Column) OrderBy {
+	return OrderBy{
+		col:   column,
+		order: "ASC",
+	}
+}
+
+func DESC(column Column) OrderBy {
+	return OrderBy{
+		col:   column,
+		order: "DESC",
 	}
 }

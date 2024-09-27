@@ -1,7 +1,10 @@
 package my_orm_mysql
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"geektime-go/day5_orm/internal"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +23,60 @@ func MemoryDB(t *testing.T, opts ...DBOpts) *DB {
 	db, err := Open("sqlite3", "file:test.db?mode=memory&cache=shared", opts...)
 	require.NoError(t, err)
 	return db
+}
+
+func TestInsert_Exec(t *testing.T) {
+	sqlMock, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlMock.Close()
+	db, err := OpenDB(sqlMock)
+	require.NoError(t, err)
+	testCases := []struct {
+		name     string
+		i        *Insert[TestUser]
+		affected int64
+		wantErr  error
+	}{{
+		name: "db error",
+		i: func() *Insert[TestUser] {
+			mock.ExpectExec("INSERT INTO .*").WillReturnError(errors.New("db error"))
+			return NewInsert[TestUser](db).Values(&TestUser{})
+		}(),
+		wantErr: errors.New("db error"),
+	},
+
+		{
+			name: "exec",
+			i: func() *Insert[TestUser] {
+				res := driver.RowsAffected(1)
+				mock.ExpectExec("INSERT INTO .*").WillReturnResult(res)
+				return NewInsert[TestUser](db).Columns("Id").Values(&TestUser{
+					Id:        1,
+					FirstName: "lily",
+				})
+			}(),
+			affected: 1,
+		},
+		{
+			name: "field unknown",
+			i: func() *Insert[TestUser] {
+
+				return NewInsert[TestUser](db).Values(&TestUser{}).Columns("invalid")
+			}(),
+			wantErr: errors.New("field unknown"),
+		}}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := tc.i.Exec(context.Background())
+			affected, err := r.RowsAffected()
+			assert.Equal(t, err, tc.wantErr)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.affected, affected)
+
+		})
+	}
 }
 
 func TestInsert_Dialect_Upsert(t *testing.T) {

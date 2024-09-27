@@ -7,14 +7,14 @@ import (
 )
 
 type ReflectValue struct {
-	val   any
+	val   reflect.Value
 	model *rft.Model
 }
 
 var _ Creator = NewReflectValue
 
 func NewReflectValue(model *rft.Model, val any) Valuer {
-	return &ReflectValue{val: val, model: model}
+	return &ReflectValue{val: reflect.ValueOf(val).Elem(), model: model}
 }
 
 func (r *ReflectValue) SetColumns(rows *sql.Rows) error {
@@ -31,11 +31,15 @@ func (r *ReflectValue) SetColumns(rows *sql.Rows) error {
 		return err
 	}
 
-	tpValueElem := reflect.ValueOf(r.val).Elem()
+	tpValueElem := r.val
 	for i, c := range cs {
 		fd := r.model.ColumnMap[c]
 		tpValueElem.FieldByName(fd.GoName).Set(reflect.ValueOf(vals[i]).Elem())
 	}
 
 	return nil
+}
+
+func (r *ReflectValue) Field(name string) (any, error) {
+	return r.val.FieldByName(name).Interface(), nil
 }

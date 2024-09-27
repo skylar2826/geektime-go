@@ -44,3 +44,13 @@ func (u *unsafeValue) SetColumns(rows *sql.Rows) error {
 	}
 	return nil
 }
+
+func (u *unsafeValue) Field(name string) (any, error) {
+	fd, ok := u.model.FieldMap[name]
+	if !ok {
+		return nil, fmt.Errorf("field %s not found", name)
+	}
+	fdAddress := unsafe.Pointer(uintptr(u.address) + fd.Offset)
+	val := reflect.NewAt(fd.Typ, fdAddress)
+	return val.Elem().Interface(), nil
+}

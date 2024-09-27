@@ -14,5 +14,6 @@ import (
 type Creator func(m *rft.Model, entity any) Valuer
 
 type Valuer interface {
+	Field(name string) (any, error)
 	SetColumns(rows *sql.Rows) error
 }

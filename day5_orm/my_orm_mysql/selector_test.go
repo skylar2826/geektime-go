@@ -324,6 +324,69 @@ func TestSelector_Select(t *testing.T) {
 				Args: []any{18},
 			},
 		},
+		{
+			// 必须是前面存在的列
+			name: "group by",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age")).GroupBy(C("FirstName")),
+			wantRes: &Query{
+				SQL: "select `first_name`,`age` from `test_model` group by `first_name`;",
+			},
+		},
+
+		{
+			name: "group by more",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age"), C("LastName")).GroupBy(C("FirstName"), C("Age")),
+			wantRes: &Query{
+				SQL: "select `first_name`,`age`,`last_name` from `test_model` group by `first_name`,`age`;",
+			},
+		},
+		// having要和group by一起出现，不能单独出现；可以考虑单独使用having报错
+		{
+			name: "having predicate",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age"), C("LastName")).GroupBy(C("FirstName"), C("Age")).Having(Avg("age").Lt(18)),
+			wantRes: &Query{
+				SQL:  "select `first_name`,`age`,`last_name` from `test_model` group by `first_name`,`age` having AVG(`age`) < ?;",
+				Args: []any{18},
+			},
+		},
+		{
+			name: "having predicate more",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age"), C("LastName")).GroupBy(C("FirstName"), C("Age")).Having(C("Age").Lt(18).And(C("FirstName").Eq("lili"))),
+			wantRes: &Query{
+				SQL:  "select `first_name`,`age`,`last_name` from `test_model` group by `first_name`,`age` having (`age` < ?) and (`first_name` = ?);",
+				Args: []any{18, "lili"},
+			},
+		},
+		{
+			name: "order by",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age")).orderBy(ASC(C("Age"))),
+			wantRes: &Query{
+				SQL: "select `first_name`,`age` from `test_model` order by `age` ASC;",
+			},
+		},
+		{
+			name: "order by more",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age")).orderBy(ASC(C("Age")), DESC(C(`FirstName`))),
+			wantRes: &Query{
+				SQL: "select `first_name`,`age` from `test_model` order by `age` ASC,`first_name` DESC;",
+			},
+		},
+		{
+			name: "limit",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age")).orderBy(ASC(C("Age")), DESC(C(`FirstName`))).Limit(1),
+			wantRes: &Query{
+				SQL:  "select `first_name`,`age` from `test_model` order by `age` ASC,`first_name` DESC limit ?;",
+				Args: []any{1},
+			},
+		},
+		{
+			name: "offset",
+			s:    NewSelector[TestModel](db).Select(C("FirstName"), C("Age")).orderBy(ASC(C("Age")), DESC(C(`FirstName`))).Limit(1).Offset(2),
+			wantRes: &Query{
+				SQL:  "select `first_name`,`age` from `test_model` order by `age` ASC,`first_name` DESC limit ? offset ?;",
+				Args: []any{1, 2},
+			},
+		},
 	}
 
 	for _, tc := range testCases {

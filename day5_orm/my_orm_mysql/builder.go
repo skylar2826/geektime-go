@@ -2,16 +2,14 @@ package my_orm_mysql
 
 import (
 	"fmt"
-	rft "geektime-go/day5_orm/model"
 	"strings"
 )
 
 type Builder struct {
-	sb      *strings.Builder
-	args    []any
-	model   *rft.Model
-	dialect Dialect
-	quoter  byte
+	sb     *strings.Builder
+	args   []any
+	quoter byte
+	core
 }
 
 func (s *Builder) quote(name string) {
@@ -20,11 +18,12 @@ func (s *Builder) quote(name string) {
 	s.sb.WriteByte(s.quoter)
 }
 
-func NewBuilder(db *DB) *Builder {
+func NewBuilder(sess Session) *Builder {
+	core := sess.getCore()
 	return &Builder{
-		sb:      &strings.Builder{},
-		dialect: db.Dialect,
-		quoter:  db.Dialect.quoter(),
+		sb:     &strings.Builder{},
+		quoter: core.dialect.quoter(),
+		core:   core,
 	}
 }
 
@@ -71,8 +70,7 @@ func (s *Builder) buildExpression(expr Expression) error {
 			s.sb.WriteByte(')')
 		}
 	case Column:
-		err := s.buildColumn(exp)
-		if err != nil {
+		if err := s.buildColumn(exp); err != nil {
 			return err
 		}
 	case value:
@@ -83,6 +81,10 @@ func (s *Builder) buildExpression(expr Expression) error {
 		s.sb.WriteString(exp.expression)
 		s.addArgs(exp.args...)
 		s.sb.WriteString(")")
+	case Aggregate:
+		if err := s.BuildAggregate(exp); err != nil {
+			return nil
+		}
 	default:
 		return fmt.Errorf("invalid expression type: %T", expr)
 	}
@@ -120,6 +122,17 @@ func (s *Builder) addArgs(val ...any) *Builder {
 	return s
 }
 
+func (s *Builder) BuildAggregate(col Aggregate) error {
+	// 聚合函数名
+	s.sb.WriteString(col.fn)
+	s.sb.WriteString("(`")
+	s.sb.WriteString(col.arg)
+
+	s.sb.WriteString("`)")
+	s.buildAs(Column{Name: col.arg, alias: col.alias})
+	return nil
+}
+
 func (s *Builder) BuildColumns(columns []Selectable) error {
 	if len(columns) == 0 {
 		s.sb.WriteString("*")
@@ -132,18 +145,13 @@ func (s *Builder) BuildColumns(columns []Selectable) error {
 		}
 		switch col := c.(type) {
 		case Column:
-			err := s.buildColumn(c.(Column))
-			if err != nil {
+			if err := s.buildColumn(c.(Column)); err != nil {
 				return err
 			}
 		case Aggregate:
-			// 聚合函数名
-			s.sb.WriteString(col.fn)
-			s.sb.WriteString("(`")
-			s.sb.WriteString(col.arg)
-
-			s.sb.WriteString("`)")
-			s.buildAs(Column{Name: col.arg, alias: col.alias})
+			if err := s.BuildAggregate(col); err != nil {
+				return err
+			}
 		case RawExpr:
 			s.sb.WriteString(col.expression)
 			s.addArgs(col.args...)

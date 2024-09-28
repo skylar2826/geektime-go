@@ -69,3 +69,9 @@ func (i *SelectSuite) TestSelect() {
 		})
 	}
 }
+
+// 所有测试跑完都清数据
+func (i *SelectSuite) TearDownSuite() {
+	fmt.Println("TearDownSuite...")
+	my_orm_mysql.RawQuery[test.SimpleStruct](i.db, "truncate table `simple_struct`;").ExecContext(context.Background())
+}

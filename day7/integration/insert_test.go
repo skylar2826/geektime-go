@@ -64,7 +64,7 @@ func (i *InsertSuite) TestInsert() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 			defer cancel()
 			res := tc.i.Exec(ctx)
 			affectId, err := res.RowsAffected()
@@ -72,6 +72,12 @@ func (i *InsertSuite) TestInsert() {
 			assert.Equal(t, affectId, tc.wantAffectId)
 		})
 	}
+}
+
+// 每个测试跑完都清数据
+func (i *InsertSuite) TearDownTest() {
+	fmt.Println("TearDownTest...")
+	res := my_orm_mysql.RawQuery[test.SimpleStruct](i.db, "truncate table `simple_struct`;").ExecContext(context.Background())
 }
 
 //

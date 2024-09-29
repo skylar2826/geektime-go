@@ -39,30 +39,30 @@ func TestSelector(t *testing.T) {
 				Args: nil,
 			},
 		},
-		{
-			name:    "from",
-			builder: NewSelector[TestModel](db).From("`table`"),
-			wantQuery: &Query{
-				SQL:  "select * from `table`;",
-				Args: nil,
-			},
-		},
-		{
-			name:    "empty from",
-			builder: NewSelector[TestModel](db).From(""),
-			wantQuery: &Query{
-				SQL:  "select * from `test_model`;",
-				Args: nil,
-			},
-		},
-		{
-			name:    "with db",
-			builder: NewSelector[TestModel](db).From("`test1`.`user`"),
-			wantQuery: &Query{
-				SQL:  "select * from `test1`.`user`;",
-				Args: nil,
-			},
-		},
+		//{
+		//	name:    "from",
+		//	builder: NewSelector[TestModel](db).From("`table`"),
+		//	wantQuery: &Query{
+		//		SQL:  "select * from `table`;",
+		//		Args: nil,
+		//	},
+		//},
+		//{
+		//	name:    "empty from",
+		//	builder: NewSelector[TestModel](db).From(""),
+		//	wantQuery: &Query{
+		//		SQL:  "select * from `test_model`;",
+		//		Args: nil,
+		//	},
+		//},
+		//{
+		//	name:    "with db",
+		//	builder: NewSelector[TestModel](db).From("`test1`.`user`"),
+		//	wantQuery: &Query{
+		//		SQL:  "select * from `test1`.`user`;",
+		//		Args: nil,
+		//	},
+		//},
 		{
 			name:    "where",
 			builder: NewSelector[TestModel](db).Where(C("Age").Eq(22)),
@@ -399,6 +399,108 @@ func TestSelector_Select(t *testing.T) {
 				}
 				assert.Equal(t, tc.wantRes, res)
 			})
+		})
+	}
+}
+
+func TestSelect_Join(t *testing.T) {
+	db := MemoryDB(t)
+
+	type Order struct {
+		Id        int
+		UsingCol1 string
+		UsingCol2 string
+	}
+
+	type OrderDetail struct {
+		OrderId   int
+		ItemId    int
+		UsingCol1 string
+		UsingCol2 string
+	}
+
+	type Item struct {
+		Id int
+	}
+
+	testCases := []struct {
+		name      string
+		s         QueryBuilder
+		wantQuery *Query
+		wantErr   error
+	}{
+		{
+			name: "specify table",
+			s:    NewSelector[Order](db).From(TableOf(&OrderDetail{})),
+			wantQuery: &Query{
+				SQL: "select * from `order_detail`;",
+			},
+		},
+
+		{
+			name: "join using",
+			s: func() QueryBuilder {
+				t1 := TableOf(&OrderDetail{})
+				t2 := TableOf(&Order{})
+				t3 := t1.join(t2).Using("UsingCol1", "UsingCol2")
+				return NewSelector[Order](db).From(t3)
+			}(),
+			wantQuery: &Query{
+				SQL: "select * from (`order_detail` Join `order` Using (`using_col1`,`using_col2`));",
+			},
+		},
+		{
+			name: "join on",
+			s: func() QueryBuilder {
+				t1 := TableOf(&OrderDetail{})
+				t2 := TableOf(&Order{})
+				// NewSelector[Order](db)中的model是Order; 而复杂查询中联合了多个元数据Order、OrderDetail，并操作Order.Id、OrderDetail.OrderId
+				// 所以需要改在buildColumn, 使用每个entity自己的元数据
+				t3 := t1.join(t2).On(t2.C("Id").Eq(t1.C("OrderId")))
+				return NewSelector[Order](db).From(t3)
+			}(),
+			wantQuery: &Query{
+				SQL: "select * from (`order_detail` Join `order` On (`id` = `order_id`));",
+			},
+		},
+		{
+			name: "join on alias",
+			s: func() QueryBuilder {
+				t1 := TableOf(&OrderDetail{}).As("t1")
+				t2 := TableOf(&Order{}).As("t2")
+				// NewSelector[Order](db)中的model是Order; 而复杂查询中联合了多个元数据Order、OrderDetail，并操作Order.Id、OrderDetail.OrderId
+				// 所以需要改在buildColumn, 使用每个entity自己的元数据
+				t3 := t1.join(t2).On(t2.C("Id").Eq(t1.C("OrderId")))
+				return NewSelector[Order](db).From(t3)
+			}(),
+			wantQuery: &Query{
+				SQL: "select * from (`order_detail` As `t1` Join `order` As `t2` On (`t2`.`id` = `t1`.`order_id`));",
+			},
+		},
+		{
+			name: "join join on",
+			s: func() QueryBuilder {
+				t1 := TableOf(&OrderDetail{}).As("t1")
+				t2 := TableOf(&Order{}).As("t2")
+				t3 := t1.join(t2).On(t2.C("Id").Eq(t1.C("OrderId")))
+				t4 := TableOf(&Item{}).As("t4")
+				t5 := t3.join(t4).On(t1.C("ItemId").Eq(t4.C("Id")))
+				return NewSelector[Order](db).From(t5)
+			}(),
+			wantQuery: &Query{
+				SQL: "select * from ((`order_detail` As `t1` Join `order` As `t2` On (`t2`.`id` = `t1`.`order_id`)) Join `item` As `t4` On (`t1`.`item_id` = `t4`.`id`));",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			q, err := tc.s.Build()
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.wantQuery, q)
 		})
 	}
 }

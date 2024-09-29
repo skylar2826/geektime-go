@@ -151,22 +151,6 @@ func (i *Insert[T]) Columns(cols ...string) *Insert[T] {
 	return i
 }
 
-var _ Handler = (&Insert[any]{}).ExecHandler
-
-func (i *Insert[T]) ExecHandler(ctx context.Context, qc *QueryContext) *QueryResult {
-	q, err := i.Build()
-	if err != nil {
-		return &QueryResult{Err: err}
-	}
-	var res sql.Result
-	res, err = i.sess.execContext(ctx, q.SQL, q.Args...)
-	return &QueryResult{
-		Result: res,
-		Err:    err,
-	}
-
-}
-
 func (i *Insert[T]) Exec(ctx context.Context) Result {
 	var err error
 	i.model, err = i.R.ParseModel(new(T))
@@ -175,13 +159,7 @@ func (i *Insert[T]) Exec(ctx context.Context) Result {
 			err: err,
 		}
 	}
-
-	root := i.ExecHandler
-	for j := len(i.middlewares) - 1; j >= 0; j-- {
-		root = i.middlewares[j](root)
-	}
-
-	res := root(ctx, &QueryContext{
+	res := Exec(ctx, i.sess, i.core, &QueryContext{
 		Type:    "Insert",
 		Builder: i,
 		Model:   i.model,
@@ -189,12 +167,11 @@ func (i *Insert[T]) Exec(ctx context.Context) Result {
 
 	if res.Result != nil {
 		return Result{
-			res: res.Result.(*Result),
+			res: res.Result.(sql.Result),
 		}
 	}
 
 	return Result{
 		err: res.Err,
 	}
-
 }

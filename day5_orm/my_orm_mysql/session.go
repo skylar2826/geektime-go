@@ -9,5 +9,5 @@ import (
 type Session interface {
 	getCore() core
 	queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	execContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	execContext(ctx context.Context, query string, args ...any) (sql.Result, error) // sql.Result
 }

@@ -35,12 +35,14 @@ func (Predicate) expr() {}
 type Column struct {
 	Name  string
 	alias string
+	table tableReference // join查询时，每个table需要单独维护自己的model
 }
 
 func (c Column) AS(name string) Column {
 	return Column{
 		Name:  c.Name,
 		alias: name,
+		table: c.table,
 	}
 }
 

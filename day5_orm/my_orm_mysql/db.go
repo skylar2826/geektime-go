@@ -3,9 +3,12 @@ package my_orm_mysql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"fmt"
 	"geektime-go/day5_orm/internal/valuer"
 	"geektime-go/day5_orm/model"
+	"log"
 )
 
 var (
@@ -115,5 +118,14 @@ func (db *DB) DoTx(ctx context.Context, fn func(ctx context.Context, tx *Tx) err
 			err = tx.Commit()
 		}
 	}()
+	return err
+}
+
+func (db *DB) Wait() error {
+	err := db.DB.Ping()
+	for errors.Is(err, driver.ErrBadConn) {
+		log.Println("数据库启动中...")
+		err = db.DB.Ping()
+	}
 	return err
 }

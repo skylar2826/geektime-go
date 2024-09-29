@@ -1,7 +1,9 @@
 package my_orm_mysql
 
 import (
+	"errors"
 	"fmt"
+	rft "geektime-go/day5_orm/model"
 	"strings"
 )
 
@@ -92,15 +94,88 @@ func (s *Builder) buildExpression(expr Expression) error {
 }
 
 func (s *Builder) buildColumn(col Column) error {
+	var field *rft.Field
+	var ok bool
 
-	name, ok := s.model.FieldMap[col.Name]
-	if !ok {
-		return fmt.Errorf("field %s not found", col.Name)
+	switch t := col.table.(type) {
+	case nil:
+		field, ok = s.model.FieldMap[col.Name]
+		if !ok {
+			return fmt.Errorf("field %s not found", col.Name)
+		}
+	case Table:
+		model, err := s.R.Get(t.entity)
+		if err != nil {
+			return err
+		}
+
+		field, ok = model.FieldMap[col.Name]
+		if !ok {
+			return fmt.Errorf("field %s not found", col.Name)
+		}
+
+		if t.alias != "" {
+			s.quote(t.alias)
+			s.sb.WriteString(".")
+		}
+	default:
+		return errors.New("invalid column type")
 	}
 
-	s.quote(name.ColName)
+	s.quote(field.ColName)
 	s.buildAs(col)
 
+	return nil
+}
+
+func (s *Builder) buildTable(table tableReference) error {
+	switch t := table.(type) {
+	case nil:
+		s.quote(s.model.TableName)
+	case Table:
+		m, err := s.R.ParseModel(t.entity)
+		if err != nil {
+			return err
+		}
+		s.quote(m.TableName)
+		if t.alias != "" {
+			s.sb.WriteString(" As ")
+			s.quote(t.alias)
+		}
+	case Join:
+		s.sb.WriteString("(")
+		if err := s.buildTable(t.left); err != nil {
+			return err
+		}
+		s.sb.WriteString(" " + t.typ + " ")
+		if err := s.buildTable(t.right); err != nil {
+			return err
+		}
+
+		if len(t.using) > 0 {
+			s.sb.WriteString(" Using (")
+			for idx, using := range t.using {
+				if idx > 0 {
+					s.sb.WriteString(",")
+				}
+				if err := s.buildColumn(Column{Name: using}); err != nil {
+					return err
+				}
+			}
+			s.sb.WriteString(")")
+		}
+		if len(t.on) > 0 {
+			s.sb.WriteString(" On (")
+			if err := s.buildPredicate(t.on); err != nil {
+				return err
+			}
+			s.sb.WriteString(")")
+		}
+
+		s.sb.WriteString(")")
+	default:
+		return errors.New("invalid table type")
+	}
 	return nil
 }
 

@@ -1,34 +1,62 @@
-# 目录结构
-参考：https://github.com/golang-standards/project-layout/blob/master/README_zh.md
+CREATE TABLE simple_struct (
+id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+bool_column BOOLEAN NOT NULL,
+bool_ptr BOOLEAN NULL,
+int_column INT NOT NULL,
+int_ptr INT NULL,
 
-/cmd 每个应用程序的目录名应该与你想要的可执行文件的名称相匹配(例如，/cmd/myapp)
+                               int8_column TINYINT NOT NULL,
+                               int8_ptr TINYINT NULL,
 
-/internal 私有应用程序和库代码
+                               int16_column SMALLINT NOT NULL,
+                               int16_ptr SMALLINT NULL,
 
-/pkg 外部应用程序可以使用的库代码(例如 /pkg/mypubliclib)
+                               int32_column INT NOT NULL,
+                               int32_ptr INT NULL,
 
-/vendor 应用程序依赖项(手动管理或使用你喜欢的依赖项管理工具，如新的内置 Go Modules 功能)。go mod vendor 命令将为你创建 /vendor 目录
+                               int64_column BIGINT NOT NULL,
+                               int64_ptr BIGINT NULL,
 
-/api 
+                               uint_column BIGINT UNSIGNED NOT NULL,
+                               uint_ptr BIGINT UNSIGNED NULL,
 
-/web 特定于 Web 应用程序的组件:静态 Web 资源、服务器端模板和 SPAs
+                               uint8_column TINYINT UNSIGNED NOT NULL,
+                               uint8_ptr TINYINT UNSIGNED NULL,
 
-/configs 
+                               uint16_column SMALLINT UNSIGNED NOT NULL,
+                               uint16_ptr SMALLINT UNSIGNED NULL,
 
-/init
+                               uint32_column INT UNSIGNED NOT NULL,
+                               uint32_ptr INT UNSIGNED NULL, -- 注意这里应该是Uint32Ptr而不是Uint32Ptr
 
-/scripts
+                               uint64_column BIGINT UNSIGNED NOT NULL,
+                               uint64_ptr BIGINT UNSIGNED NULL, -- 同样，这里应该是Uint64Ptr
 
-/build
+                               float32_column FLOAT NOT NULL,
+                               float32_ptr FLOAT NULL,
 
-/deployments IaaS、PaaS、系统和容器编排部署配置和模板
+                               float64_column DOUBLE NOT NULL,
+                               float64_ptr DOUBLE NULL,
 
-/test 
+                               byte_column TINYINT UNSIGNED NOT NULL,
+                               byte_ptr TINYINT UNSIGNED NULL,
 
-/docs
+                               byte_array TEXT, -- 切片类型通常存储为TEXT或BLOB
 
-/tools
+                               string_column VARCHAR(255) NOT NULL, -- 根据需要调整长度
 
-/examples
+                               null_string_ptr VARCHAR(255) NULL,
+                               null_int16_ptr SMALLINT NULL,
+                               null_int32_ptr INT NULL,
+                               null_int64_ptr BIGINT NULL,
+                               null_bool_ptr BOOLEAN NULL,
+                               null_time_ptr DATETIME NULL,
+                               null_float64_ptr DOUBLE NULL,
 
-/assets
+                               json_column JSON
+);
+
+go test ./... 跑单元测试
+go test -tags=e2e ./... 单元测试和集成测试一起跑
+
+// go:build e2e

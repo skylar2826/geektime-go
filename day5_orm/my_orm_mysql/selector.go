@@ -14,7 +14,7 @@ type Selectable interface {
 }
 
 type Selector[T any] struct {
-	table string
+	table tableReference
 	where []Predicate
 
 	//r *rft.Register
@@ -54,10 +54,8 @@ func (s *Selector[T]) Build() (*Query, error) {
 	}
 	s.sb.WriteString(" from ")
 
-	if s.table != "" {
-		s.sb.WriteString(s.table)
-	} else {
-		s.quote(s.model.TableName)
+	if err = s.buildTable(s.table); err != nil {
+		return nil, err
 	}
 
 	if len(s.where) > 0 {
@@ -145,18 +143,12 @@ func (s *Selector[T]) GetV1(ctx context.Context) (*T, error) {
 }
 
 func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
-
 	var err error
 	s.model, err = s.R.ParseModel(new(T))
 	if err != nil {
 		return nil, err
 	}
-
-	root := s.getHandler
-	for i := len(s.middlewares) - 1; i >= 0; i-- {
-		root = s.middlewares[i](root)
-	}
-	res := root(ctx, &QueryContext{
+	res := get[T](ctx, s.sess, s.core, &QueryContext{
 		Type:    "Select",
 		Builder: s,
 		Model:   s.model,
@@ -167,71 +159,20 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 	return nil, res.Err
 }
 
-var _ Handler = (&Selector[any]{}).getHandler
-
-func (s *Selector[T]) getHandler(ctx context.Context, qc *QueryContext) *QueryResult {
-	q, err := s.Build()
-	if err != nil {
-		return &QueryResult{
-			Err: err,
-		}
-	}
-
-	var rows *sql.Rows
-	rows, err = s.sess.queryContext(ctx, q.SQL, q.Args...)
-	if err != nil {
-		return &QueryResult{
-			Err: err,
-		}
-	}
-
-	if !rows.Next() {
-		return &QueryResult{
-			Err: internal.ErrorNoRows,
-		}
-	}
-
-	tp := new(T)
-	v := s.Creator(s.model, tp)
-	err = v.SetColumns(rows)
-	if err != nil {
-		return &QueryResult{
-			Err: err,
-		}
-	}
-	return &QueryResult{
-		Result: tp,
-	}
-
-}
-
 func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
-	q, err := s.Build()
+	var err error
+	s.model, err = s.R.ParseModel(new(T))
 	if err != nil {
 		return nil, err
 	}
-
-	var rows *sql.Rows
-	rows, err = s.sess.queryContext(ctx, q.SQL, q.Args...)
-	if err != nil {
-		return nil, err
-	}
-
-	var tps []*T
-	for rows.Next() {
-		tp := new(T)
-		v := s.Creator(s.model, tp)
-		err = v.SetColumns(rows)
-		if err != nil {
-			return nil, err
-		}
-
-		tps = append(tps, tp)
-	}
-	return tps, nil
+	return getMuti[T](ctx, s.sess, s.core, &QueryContext{
+		Type:    "Select",
+		Builder: s,
+		Model:   s.model,
+	})
 }
 
-func (s *Selector[T]) From(table string) *Selector[T] {
+func (s *Selector[T]) From(table tableReference) *Selector[T] {
 	s.table = table
 	return s
 }

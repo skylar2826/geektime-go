@@ -4,10 +4,10 @@ import "fmt"
 
 const (
 	UserName = "root"
-	Password = "15271908767Aa!"
+	Password = "15271908767Aa!" //wxFqogsjy5+V
 	Ip       = "127.0.0.1"
 	Port     = "3306"
-	DbName   = "test1"
+	DbName   = "test"
 )
 
 type User struct {

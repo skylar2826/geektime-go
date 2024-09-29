@@ -15,6 +15,7 @@ var (
 	opNot op = "not"
 	opAnd op = "and"
 	opOr  op = "or"
+	opLt  op = "<"
 )
 
 // Expression 是标记接口，代表表达式;
@@ -32,27 +33,50 @@ type Predicate struct {
 func (Predicate) expr() {}
 
 type Column struct {
-	name string
+	Name  string
+	alias string
+	table tableReference // join查询时，每个table需要单独维护自己的model
 }
 
-func (Column) expr() {}
+func (c Column) AS(name string) Column {
+	return Column{
+		Name:  c.Name,
+		alias: name,
+		table: c.table,
+	}
+}
+
+func (Column) expr()       {}
+func (Column) selectable() {}
+func (Column) assign()     {}
 
 func C(name string) Column {
-	return Column{name}
+	return Column{Name: name}
 }
-
-type value struct {
-	val any
-}
-
-func (value) expr() {}
 
 // Eq C("id").Eq("5")
 func (c Column) Eq(arg any) Predicate {
 	return Predicate{
 		left:  c,
 		op:    opEq,
-		right: value{val: arg},
+		right: valueOf(arg),
+	}
+}
+
+func (c Column) Lt(arg any) Predicate {
+	return Predicate{
+		left:  c,
+		op:    opLt,
+		right: valueOf(arg),
+	}
+}
+
+func valueOf(val any) Expression {
+	switch v := val.(type) {
+	case Expression:
+		return v
+	default:
+		return value{val: v}
 	}
 }
 
@@ -77,5 +101,91 @@ func (left Predicate) Or(right Predicate) Predicate {
 		left:  left,
 		op:    opOr,
 		right: right,
+	}
+}
+
+type value struct {
+	val any
+}
+
+func (value) expr() {}
+
+type Aggregate struct {
+	fn    string
+	arg   string
+	alias string
+}
+
+func (Aggregate) selectable() {}
+func (Aggregate) expr()       {}
+
+func Avg(col string) Aggregate {
+	return Aggregate{
+		fn:  "AVG",
+		arg: col,
+	}
+}
+
+func (a Aggregate) AS(name string) Aggregate {
+	return Aggregate{
+		fn:    a.fn,
+		arg:   a.arg,
+		alias: name,
+	}
+}
+
+func (a Aggregate) Eq(arg any) Predicate {
+	return Predicate{
+		left:  a,
+		op:    opEq,
+		right: valueOf(arg),
+	}
+}
+
+func (a Aggregate) Lt(arg any) Predicate {
+	return Predicate{
+		left:  a,
+		op:    opLt,
+		right: valueOf(arg),
+	}
+}
+
+type RawExpr struct {
+	expression string
+	args       []any
+}
+
+func (RawExpr) expr()       {}
+func (RawExpr) selectable() {}
+
+func Raw(expr string, args ...any) RawExpr {
+	return RawExpr{
+		expression: expr,
+		args:       args,
+	}
+}
+
+func (r RawExpr) AsPredicate() Predicate {
+	return Predicate{
+		left: r,
+	}
+}
+
+type OrderBy struct {
+	col   Column
+	order string
+}
+
+func ASC(column Column) OrderBy {
+	return OrderBy{
+		col:   column,
+		order: "ASC",
+	}
+}
+
+func DESC(column Column) OrderBy {
+	return OrderBy{
+		col:   column,
+		order: "DESC",
 	}
 }

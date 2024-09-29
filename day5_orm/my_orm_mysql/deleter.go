@@ -1,18 +1,22 @@
 package my_orm_mysql
 
 import (
-	rft "geektime-go/day5_orm/reflect"
+	rft "geektime-go/day5_orm/model"
 	"strings"
 )
 
 type Deleter[T any] struct {
 	table string
-	model *rft.Model
-
 	where []Predicate
-
 	Builder
 	r *rft.Register
+}
+
+func NewDeleter[T any](db *DB) *Deleter[T] {
+	builder := NewBuilder(db)
+	return &Deleter[T]{
+		Builder: *builder,
+	}
 }
 
 func (d *Deleter[T]) From(table string) *Deleter[T] {
@@ -46,7 +50,7 @@ func (d *Deleter[T]) Build() (*Query, error) {
 
 	if len(d.where) > 0 {
 		d.sb.WriteString(" where ")
-		if err := d.buildPredicate(d.where, d.model); err != nil {
+		if err := d.buildPredicate(d.where); err != nil {
 			return nil, err
 		}
 

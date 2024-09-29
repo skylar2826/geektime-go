@@ -1,4 +1,4 @@
-package reflect
+package model
 
 import (
 	"geektime-go/day5_orm/types"
@@ -18,7 +18,7 @@ func TestModels(t *testing.T) {
 			entity: types.TestModel{},
 			wantRes: &Model{
 				TableName: "test_model",
-				Fields: map[string]*field{
+				FieldMap: map[string]*Field{
 					"Id": {
 						ColName: "id",
 					},
@@ -92,7 +92,7 @@ func TestRegister_get(t *testing.T) {
 			cacheSize: 1,
 			wantRes: &Model{
 				TableName: "test_model",
-				Fields: map[string]*field{
+				FieldMap: map[string]*Field{
 					"Id": {
 						ColName: "id",
 					},
@@ -112,7 +112,7 @@ func TestRegister_get(t *testing.T) {
 	for _, tc := range testCases {
 		r := NewRegister()
 		t.Run(tc.name, func(t *testing.T) {
-			m, err := r.get(tc.entity)
+			m, err := r.Get(tc.entity)
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return
@@ -148,7 +148,7 @@ func TestRegister_tag(t *testing.T) {
 
 			wantRes: &Model{
 				TableName: "tag_table",
-				Fields: map[string]*field{
+				FieldMap: map[string]*Field{
 
 					"FirstName": {
 						ColName: "first_name_t",
@@ -160,7 +160,7 @@ func TestRegister_tag(t *testing.T) {
 	for _, tc := range testCases {
 		r := NewRegister()
 		t.Run(tc.name, func(t *testing.T) {
-			m, err := r.get(tc.entity)
+			m, err := r.Get(tc.entity)
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return
@@ -195,7 +195,7 @@ func TestRegister_tableName(t *testing.T) {
 			entity: customUserName1{},
 			wantRes: &Model{
 				TableName: "custom_user_name1",
-				Fields: map[string]*field{
+				FieldMap: map[string]*Field{
 					"FirstName": {
 						ColName: "first_name",
 					},
@@ -207,7 +207,7 @@ func TestRegister_tableName(t *testing.T) {
 			entity: customUserName{},
 			wantRes: &Model{
 				TableName: "custom_table",
-				Fields: map[string]*field{
+				FieldMap: map[string]*Field{
 					"FirstName": {
 						ColName: "first_name",
 					},
@@ -219,7 +219,7 @@ func TestRegister_tableName(t *testing.T) {
 			entity: &customUserName{},
 			wantRes: &Model{
 				TableName: "custom_table",
-				Fields: map[string]*field{
+				FieldMap: map[string]*Field{
 					"FirstName": {
 						ColName: "first_name",
 					},
@@ -230,7 +230,7 @@ func TestRegister_tableName(t *testing.T) {
 	for _, tc := range testCases {
 		r := NewRegister()
 		t.Run(tc.name, func(t *testing.T) {
-			m, err := r.get(tc.entity)
+			m, err := r.Get(tc.entity)
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return

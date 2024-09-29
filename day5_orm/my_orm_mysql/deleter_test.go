@@ -3,10 +3,13 @@ package my_orm_mysql
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestDeleter(t *testing.T) {
+	db, err := Open("sqlite3", "file:test.db?cache=shared&mode=memory", DBWithDialect(DialectMySql))
+	require.NoError(t, err)
 	testCases := []struct {
 		name      string
 		entity    any
@@ -16,7 +19,7 @@ func TestDeleter(t *testing.T) {
 	}{
 		{
 			name:    "no from",
-			builder: &Deleter[TestModel]{},
+			builder: NewDeleter[TestModel](db),
 			wantQuery: &Query{
 				SQL:  "delete from `test_model`;",
 				Args: nil,
@@ -24,7 +27,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "from",
-			builder: (&Deleter[TestModel]{}).From("`table`"),
+			builder: NewDeleter[TestModel](db).From("`table`"),
 			wantQuery: &Query{
 				SQL:  "delete from `table`;",
 				Args: nil,
@@ -32,7 +35,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "empty from",
-			builder: (&Deleter[TestModel]{}).From(""),
+			builder: NewDeleter[TestModel](db).From(""),
 			wantQuery: &Query{
 				SQL:  "delete from `test_model`;",
 				Args: nil,
@@ -40,7 +43,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "with db",
-			builder: (&Deleter[TestModel]{}).From("`test1`.`user`"),
+			builder: NewDeleter[TestModel](db).From("`test1`.`user`"),
 			wantQuery: &Query{
 				SQL:  "delete from `test1`.`user`;",
 				Args: nil,
@@ -48,7 +51,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "where",
-			builder: (&Deleter[TestModel]{}).Where(C("Age").Eq(22)),
+			builder: NewDeleter[TestModel](db).Where(C("Age").Eq(22)),
 			wantQuery: &Query{
 				SQL:  "delete from `test_model` where `age` = ?;",
 				Args: []any{22},
@@ -56,7 +59,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "not",
-			builder: (&Deleter[TestModel]{}).Where(Not(C("Age").Eq(22))),
+			builder: NewDeleter[TestModel](db).Where(Not(C("Age").Eq(22))),
 			wantQuery: &Query{
 				SQL:  "delete from `test_model` where  not (`age` = ?);",
 				Args: []any{22},
@@ -64,7 +67,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "and",
-			builder: (&Deleter[TestModel]{}).Where(C("Age").Eq(22).And(C("Name").Eq("lily"))),
+			builder: NewDeleter[TestModel](db).Where(C("Age").Eq(22).And(C("Name").Eq("lily"))),
 			wantQuery: &Query{
 				SQL:  "delete from `test_model` where (`age` = ?) and (`name` = ?);",
 				Args: []any{22, "lily"},
@@ -72,7 +75,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "more and",
-			builder: (&Deleter[TestModel]{}).Where(C("Age").Eq(22).And(C("Name").Eq("lily").And(C("Sex").Eq(0)))),
+			builder: NewDeleter[TestModel](db).Where(C("Age").Eq(22).And(C("Name").Eq("lily").And(C("Sex").Eq(0)))),
 			wantQuery: &Query{
 				SQL:  "delete from `test_model` where (`age` = ?) and ((`name` = ?) and (`sex` = ?));",
 				Args: []any{22, "lily", 0},
@@ -80,7 +83,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "or",
-			builder: (&Deleter[TestModel]{}).Where(C("Age").Eq(22).Or(C("Name").Eq("lily"))),
+			builder: NewDeleter[TestModel](db).Where(C("Age").Eq(22).Or(C("Name").Eq("lily"))),
 			wantQuery: &Query{
 				SQL:  "delete from `test_model` where (`age` = ?) or (`name` = ?);",
 				Args: []any{22, "lily"},
@@ -88,7 +91,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "empty where",
-			builder: (&Deleter[TestModel]{}).Where(),
+			builder: NewDeleter[TestModel](db).Where(),
 			wantQuery: &Query{
 				SQL:  "delete from `test_model`;",
 				Args: nil,
@@ -96,7 +99,7 @@ func TestDeleter(t *testing.T) {
 		},
 		{
 			name:    "invalid column",
-			builder: (&Deleter[TestModel]{}).Where(Not(C("XXX").Eq(22))),
+			builder: NewDeleter[TestModel](db).Where(Not(C("XXX").Eq(22))),
 			wantErr: fmt.Errorf("field XXX not found"),
 		},
 	}

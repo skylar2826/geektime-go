@@ -87,6 +87,12 @@ func (s *Builder) buildExpression(expr Expression) error {
 		if err := s.BuildAggregate(exp); err != nil {
 			return nil
 		}
+	case SubQueryExpr:
+		s.sb.WriteString(exp.pred)
+		s.sb.WriteByte(' ')
+		return s.buildSubQuery(exp.s, false)
+	case SubQuery:
+		return s.buildSubQuery(exp, false)
 	default:
 		return fmt.Errorf("invalid expression type: %T", expr)
 	}
@@ -143,39 +149,64 @@ func (s *Builder) buildTable(table tableReference) error {
 			s.quote(t.alias)
 		}
 	case Join:
-		s.sb.WriteString("(")
-		if err := s.buildTable(t.left); err != nil {
-			return err
-		}
-		s.sb.WriteString(" " + t.typ + " ")
-		if err := s.buildTable(t.right); err != nil {
-			return err
-		}
-
-		if len(t.using) > 0 {
-			s.sb.WriteString(" Using (")
-			for idx, using := range t.using {
-				if idx > 0 {
-					s.sb.WriteString(",")
-				}
-				if err := s.buildColumn(Column{Name: using}); err != nil {
-					return err
-				}
-			}
-			s.sb.WriteString(")")
-		}
-		if len(t.on) > 0 {
-			s.sb.WriteString(" On (")
-			if err := s.buildPredicate(t.on); err != nil {
-				return err
-			}
-			s.sb.WriteString(")")
-		}
-
-		s.sb.WriteString(")")
+		return s.buildJoin(t)
+	case SubQuery:
+		return s.buildSubQuery(t, true)
 	default:
 		return errors.New("invalid table type")
 	}
+	return nil
+}
+
+func (s *Builder) buildSubQuery(t SubQuery, useAlias bool) error {
+	q, err := t.s.Build()
+	if err != nil {
+		return err
+	}
+	s.sb.WriteString("(")
+	s.sb.WriteString(q.SQL[:len(q.SQL)-1])
+	if len(q.Args) > 0 {
+		s.addArgs(q.Args)
+	}
+	s.sb.WriteString(")")
+	if useAlias {
+		s.sb.WriteString(" AS ")
+		s.quote(t.alias)
+	}
+	return nil
+}
+
+func (s *Builder) buildJoin(t Join) error {
+	s.sb.WriteString("(")
+	if err := s.buildTable(t.left); err != nil {
+		return err
+	}
+	s.sb.WriteString(" " + t.typ + " ")
+	if err := s.buildTable(t.right); err != nil {
+		return err
+	}
+
+	if len(t.using) > 0 {
+		s.sb.WriteString(" Using (")
+		for idx, using := range t.using {
+			if idx > 0 {
+				s.sb.WriteString(",")
+			}
+			if err := s.buildColumn(Column{Name: using}); err != nil {
+				return err
+			}
+		}
+		s.sb.WriteString(")")
+	}
+	if len(t.on) > 0 {
+		s.sb.WriteString(" On (")
+		if err := s.buildPredicate(t.on); err != nil {
+			return err
+		}
+		s.sb.WriteString(")")
+	}
+
+	s.sb.WriteString(")")
 	return nil
 }
 

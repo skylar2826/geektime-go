@@ -212,3 +212,15 @@ func (s *Selector[T]) Limit(limit int) *Selector[T] {
 	s.limit = limit
 	return s
 }
+func (s *Selector[T]) AsSubQuery(alias string) SubQuery {
+	tbl := s.table
+	if tbl == nil {
+		tbl = TableOf(new(T))
+	}
+	return SubQuery{
+		s:       s,
+		alias:   alias,
+		table:   tbl,
+		columns: s.columns,
+	}
+}

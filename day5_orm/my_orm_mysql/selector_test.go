@@ -504,3 +504,83 @@ func TestSelect_Join(t *testing.T) {
 		})
 	}
 }
+
+func TestSelect_SubQuery(t *testing.T) {
+	db := MemoryDB(t)
+
+	type Order struct {
+		Id        int
+		UsingCol1 string
+		UsingCol2 string
+	}
+
+	type OrderDetail struct {
+		OrderId   int
+		ItemId    int
+		UsingCol1 string
+		UsingCol2 string
+	}
+
+	type Item struct {
+		Id int
+	}
+
+	testCases := []struct {
+		name      string
+		s         QueryBuilder
+		wantQuery *Query
+		wantErr   error
+	}{
+		{
+			name: "from",
+			s: func() QueryBuilder {
+				sub := NewSelector[OrderDetail](db).AsSubQuery("sub")
+				return NewSelector[Order](db).From(sub)
+			}(),
+			wantQuery: &Query{
+				SQL: "select * from (select * from `order_detail`) AS `sub`;",
+			},
+		},
+		{
+			name: "in",
+			s: func() QueryBuilder {
+				sub := NewSelector[OrderDetail](db).Select(C("OrderId")).AsSubQuery("sub")
+				return NewSelector[Order](db).Where(C("Id").InQuery(sub))
+			}(),
+			wantQuery: &Query{
+				SQL: "select * from `order` where `id` in (select `order_id` from `order_detail`);",
+			},
+		},
+		{
+			name: "exist",
+			s: func() QueryBuilder {
+				sub := NewSelector[OrderDetail](db).Select(C("OrderId")).AsSubQuery("sub")
+				return NewSelector[Order](db).Where(Exist(sub))
+			}(),
+			wantQuery: &Query{
+				SQL: "select * from `order` where  exist (select `order_id` from `order_detail`);",
+			},
+		},
+		{
+			name: "not exist",
+			s: func() QueryBuilder {
+				sub := NewSelector[OrderDetail](db).Select(C("OrderId")).AsSubQuery("sub")
+				return NewSelector[Order](db).Where(Not(Exist(sub)))
+			}(),
+			wantQuery: &Query{
+				SQL: "select * from `order` where  not ( exist (select `order_id` from `order_detail`));",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			q, err := tc.s.Build()
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.wantQuery, q)
+		})
+	}
+}

@@ -1,21 +1,22 @@
-package gen
+package main
 
-import "testing"
+import (
+	"bytes"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"os"
+	"testing"
+)
 
-func Test_gen(t *testing.T) {
-	type args struct {
-		w       *io.Writer
-		srcFile string
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gen(tt.args.w, tt.args.srcFile)
-		})
-	}
+func Test_Gen(t *testing.T) {
+	buffer := &bytes.Buffer{}
+	err := gen(buffer, "testdata/user.go")
+	require.NoError(t, err)
+	assert.Equal(t, ``, buffer.String())
+}
+
+func Test_Gen_File(t *testing.T) {
+	f, err := os.Create("testdata/user_gen.go")
+	err = gen(f, "testdata/user.go")
+	require.NoError(t, err)
 }

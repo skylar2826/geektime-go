@@ -11,11 +11,13 @@ func (op op) String() string {
 //type op = string
 
 var (
-	opEq  op = "="
-	opNot op = "not"
-	opAnd op = "and"
-	opOr  op = "or"
-	opLt  op = "<"
+	opEq    op = "="
+	opNot   op = "not"
+	opAnd   op = "and"
+	opOr    op = "or"
+	opLt    op = "<"
+	opIn    op = "in"
+	opExist op = "exist"
 )
 
 // Expression 是标记接口，代表表达式;
@@ -52,6 +54,14 @@ func (Column) assign()     {}
 
 func C(name string) Column {
 	return Column{Name: name}
+}
+
+func (c Column) InQuery(sub SubQuery) Predicate {
+	return Predicate{
+		left:  c,
+		op:    opIn,
+		right: sub,
+	}
 }
 
 // Eq C("id").Eq("5")
@@ -187,5 +197,12 @@ func DESC(column Column) OrderBy {
 	return OrderBy{
 		col:   column,
 		order: "DESC",
+	}
+}
+
+func Exist(sub SubQuery) Predicate {
+	return Predicate{
+		op:    opExist,
+		right: sub,
 	}
 }

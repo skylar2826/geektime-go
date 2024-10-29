@@ -2,7 +2,6 @@ package day9
 
 import (
 	"context"
-	"errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -47,7 +46,7 @@ func TestCache(t *testing.T) {
 				time.Sleep(time.Second * 2)
 				return b
 			},
-			wantErr: errors.New(ErrNotFound),
+			wantErr: ErrNotFound,
 		},
 	}
 

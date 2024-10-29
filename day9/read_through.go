@@ -10,13 +10,14 @@ import (
 // expiration 是过期时间, loadFunc\expiration\logFunc 必填
 type ReadThroughCache[T any] struct {
 	memoryCache
-	loadFunc   func(ctx context.Context, key string) (T, error) // 加载数据库中的该字段
+	loadFunc   func(ctx context.Context, key string) (*T, error) // 加载数据库中的该字段
 	expiration time.Duration
-	logFunc    func(err error)
+	logFunc    func(val ...any)
 	g          singleflight.Group
 }
 
 func (r *ReadThroughCache[T]) Get(ctx context.Context, key string) (T, error) {
+
 	val, err := r.memoryCache.Get(ctx, key)
 	if err != nil && err.Error() == ErrNotFound.Error() {
 		val, err = r.loadFunc(ctx, key)
@@ -27,7 +28,7 @@ func (r *ReadThroughCache[T]) Get(ctx context.Context, key string) (T, error) {
 			}
 		}
 	}
-	return val, nil
+	return val.(T), nil
 }
 
 func (r *ReadThroughCache[T]) GetV1(ctx context.Context, key string) (T, error) {
@@ -43,7 +44,7 @@ func (r *ReadThroughCache[T]) GetV1(ctx context.Context, key string) (T, error) 
 			}
 		}()
 	}
-	return val, nil
+	return val.(T), nil
 }
 
 func (r *ReadThroughCache[T]) GetV2(ctx context.Context, key string) (T, error) {
@@ -60,7 +61,7 @@ func (r *ReadThroughCache[T]) GetV2(ctx context.Context, key string) (T, error) 
 		}
 
 	}
-	return val, nil
+	return val.(T), nil
 }
 
 func (r *ReadThroughCache[T]) GetV3(ctx context.Context, key string) (T, error) {
@@ -78,7 +79,7 @@ func (r *ReadThroughCache[T]) GetV3(ctx context.Context, key string) (T, error) 
 		})
 
 	}
-	return val, nil
+	return val.(T), nil
 }
 
 // 使用方式

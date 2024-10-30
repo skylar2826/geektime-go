@@ -12,14 +12,18 @@ import (
 var (
 	ErrFailedToPreemptLock = errors.New("加锁失败")
 	ErrLockNotExist        = errors.New("锁不存在")
+	ErrFailedLock          = errors.New("过期时间更新失败")
 	//go:embed lua/unlock.lua
 	luaUnlock string
+	//go:embed lua/refresh.lua
+	luaRefresh string
 )
 
 type lock struct {
-	key    string
-	value  string
-	client redis.Cmdable
+	key        string
+	value      string
+	client     redis.Cmdable
+	expiration time.Duration
 }
 
 func (l *lock) Unlock(ctx context.Context) error {
@@ -27,8 +31,19 @@ func (l *lock) Unlock(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if res != 1 {
+	if res != int64(1) {
 		return ErrLockNotExist
+	}
+	return nil
+}
+
+func (l *lock) Refresh(ctx context.Context) error {
+	res, err := l.client.Eval(ctx, luaRefresh, []string{l.key}, l.value, l.expiration.Seconds()).Int64()
+	if err != nil {
+		return err
+	}
+	if res != 1 {
+		return ErrFailedLock
 	}
 	return nil
 }
@@ -53,8 +68,9 @@ func (r *RedisLockClient) tryLock(ctx context.Context, key string, expiration ti
 	}
 
 	return &lock{
-		key:    key,
-		value:  val,
-		client: r.client,
+		key:        key,
+		value:      val,
+		client:     r.client,
+		expiration: expiration,
 	}, nil
 }

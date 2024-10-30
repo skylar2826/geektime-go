@@ -68,3 +68,69 @@ func TestRedisLock_Lock(t *testing.T) {
 		})
 	}
 }
+
+func TestRedisLock_Unlock(t *testing.T) {
+	testCases := []struct {
+		name    string
+		mock    func(ctrl *gomock.Controller) redis.Cmdable
+		key     string
+		value   string
+		wantErr error
+	}{
+		{
+			name:  "error",
+			key:   "key1",
+			value: "value1",
+			mock: func(ctrl *gomock.Controller) redis.Cmdable {
+				cmd := mocks.NewMockCmdable(ctrl)
+				res := redis.NewCmd(context.Background())
+				res.SetErr(context.DeadlineExceeded)
+				cmd.EXPECT().Eval(context.Background(), luaUnlock, []string{"key1"}, "value1").Return(res)
+				return cmd
+			},
+			wantErr: context.DeadlineExceeded,
+		},
+		{
+			name:  "error",
+			key:   "key1",
+			value: "value1",
+			mock: func(ctrl *gomock.Controller) redis.Cmdable {
+				cmd := mocks.NewMockCmdable(ctrl)
+				res := redis.NewCmd(context.Background())
+				res.SetVal(0)
+				cmd.EXPECT().Eval(context.Background(), luaUnlock, []string{"key1"}, "value1").Return(res)
+				return cmd
+			},
+			wantErr: ErrLockNotExist,
+		},
+		{
+			name:  "error",
+			key:   "key1",
+			value: "value1",
+			mock: func(ctrl *gomock.Controller) redis.Cmdable {
+				cmd := mocks.NewMockCmdable(ctrl)
+				res := redis.NewCmd(context.Background())
+				res.SetVal(1)
+				cmd.EXPECT().Eval(context.Background(), luaUnlock, []string{"key1"}, "value1").Return(res)
+				return cmd
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			l := &lock{
+				key:    tc.key,
+				value:  tc.value,
+				client: tc.mock(ctrl),
+			}
+			err := l.Unlock(context.Background())
+			assert.Equal(t, err, tc.wantErr)
+			if err != nil {
+				return
+			}
+
+		})
+	}
+}

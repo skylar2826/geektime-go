@@ -120,7 +120,7 @@ func TestRedisLock_Unlock(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			l := &lock{
+			l := &Lock{
 				key:    tc.key,
 				value:  tc.value,
 				client: tc.mock(ctrl),

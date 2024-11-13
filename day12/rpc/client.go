@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/silenceper/pool"
 	"net"
 	"reflect"
 	"time"
@@ -82,17 +83,29 @@ func setFuncField(service Service, proxy proxy) error {
 }
 
 type Client struct {
-	conn net.Conn
+	pool pool.Pool
 	ConnMsg
 }
 
 func NewClient(network, addr string, timeout time.Duration) (*Client, error) {
-	conn, err := net.DialTimeout(network, addr, timeout)
+	p, err := pool.NewChannelPool(&pool.Config{
+		InitialCap:  1,
+		MaxCap:      30,
+		MaxIdle:     10,
+		IdleTimeout: time.Minute,
+		Factory: func() (interface{}, error) {
+			return net.DialTimeout(network, addr, timeout)
+		},
+		Close: func(i interface{}) error {
+			return i.(net.Conn).Close()
+		},
+	})
+
 	if err != nil {
 		return nil, err
 	}
 	return &Client{
-		conn: conn,
+		pool: p,
 	}, nil
 
 }
@@ -118,16 +131,22 @@ func (c *Client) invoke(ctx context.Context, request *Request) (*Response, error
 }
 
 func (c *Client) Send(ctx context.Context, data []byte) ([]byte, error) {
-	err := c.SendMsg(data, c.conn)
+	val, err := c.pool.Get()
+	conn := val.(net.Conn)
 	if err != nil {
-		_ = c.conn.Close()
+		_ = c.pool.Close(conn)
+		return nil, err
+	}
+	err = c.SendMsg(data, conn)
+	if err != nil {
+		_ = c.pool.Close(conn)
 		return nil, err
 	}
 
 	var res []byte
-	res, err = c.AcceptMsg(c.conn)
+	res, err = c.AcceptMsg(conn)
 	if err != nil {
-		_ = c.conn.Close()
+		_ = c.pool.Close(conn)
 		return nil, err
 	}
 

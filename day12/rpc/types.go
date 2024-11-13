@@ -2,20 +2,20 @@ package rpc
 
 import "context"
 
-type Service interface {
-	Name() string
-}
-
 type Request struct {
-	ServiceName string
-	MethodName  string
-	Arg         []byte
-}
-
-type Proxy interface {
-	invoke(ctx context.Context, req *Request) (*Response, error)
+	ServiceName string `json:"serviceName"`
+	MethodName  string `json:"methodName"`
+	Arg         []byte `json:"arg"`
 }
 
 type Response struct {
-	data []byte
+	Data []byte `json:"data"`
+}
+
+type proxy interface {
+	invoke(ctx context.Context, request *Request) (*Response, error)
+}
+
+type Service interface {
+	Name() string
 }

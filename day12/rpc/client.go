@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"net"
@@ -10,27 +9,26 @@ import (
 	"time"
 )
 
-// InitClientProxy 要为 GetById 之类的函数类型字段赋值
-func InitClientProxy(addr string, service Service) error {
-	client, err := NewClient(addr)
+func InitClientProxy(network, addr string, timeout time.Duration, service Service) error {
+	c, err := NewClient(network, addr, timeout)
 	if err != nil {
 		return err
 	}
-	return setFuncField(service, client)
+	return setFuncField(service, c)
 }
 
-func setFuncField(service Service, proxy Proxy) error {
+// 支持远程调用方法
+func setFuncField(service Service, proxy proxy) error {
 	if service == nil {
-		return errors.New("service 不允许为 nil")
-	}
-	val := reflect.ValueOf(service)
-	typ := val.Type()
-	// 只支持一级指针结构
-	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
-		return errors.New("只支持指向结构体的一级指针")
+		return errors.New("服务不能为空")
 	}
 
-	val = val.Elem()
+	typ := reflect.TypeOf(service)
+	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
+		return errors.New("服务只支持一级指针")
+	}
+
+	val := reflect.ValueOf(service).Elem()
 	typ = typ.Elem()
 
 	numField := typ.NumField()
@@ -40,116 +38,98 @@ func setFuncField(service Service, proxy Proxy) error {
 
 		if fieldVal.CanSet() {
 			fnVal := reflect.MakeFunc(fieldTyp.Type, func(args []reflect.Value) (results []reflect.Value) {
-
 				ctx := args[0].Interface().(context.Context)
-				retVal := reflect.New(fieldTyp.Type.Out(0).Elem()) // 返回值的第0个
+				resVal := reflect.New(fieldTyp.Type.Out(0).Elem())
 
 				reqData, err := json.Marshal(args[1].Interface())
 				if err != nil {
 					return []reflect.Value{
-						retVal,
+						resVal,
 						reflect.ValueOf(err),
 					}
 				}
 				req := &Request{
 					ServiceName: service.Name(),
 					MethodName:  fieldTyp.Name,
-
-					//args[0]是context, args[1] 是参数
-					//Args: slice.Map[reflect.Value, any](args, func(idx int, src reflect.Value) any {
-					//	return src.Interface()
-					//}),
-					Arg: reqData,
+					Arg:         reqData,
 				}
 
-				var resp *Response
-				resp, err = proxy.invoke(ctx, req)
-
+				var res *Response
+				res, err = proxy.invoke(ctx, req)
 				if err != nil {
 					return []reflect.Value{
-						retVal,
+						resVal,
 						reflect.ValueOf(err),
 					}
 				}
 
-				err = json.Unmarshal(resp.data, retVal.Interface())
+				err = json.Unmarshal(res.Data, resVal.Interface())
 				if err != nil {
 					return []reflect.Value{
-						retVal,
+						resVal,
 						reflect.ValueOf(err),
 					}
 				}
 				return []reflect.Value{
-					retVal,
+					resVal,
 					reflect.Zero(reflect.TypeOf(new(error)).Elem()),
 				}
 			})
 			fieldVal.Set(fnVal)
 		}
 	}
-
 	return nil
 }
 
-const numOfLengthBytes = 8
-
 type Client struct {
 	conn net.Conn
+	ConnMsg
 }
 
-func NewClient(addr string) (*Client, error) {
-	conn, err := net.DialTimeout("tcp", addr, time.Second*3)
+func NewClient(network, addr string, timeout time.Duration) (*Client, error) {
+	conn, err := net.DialTimeout(network, addr, timeout)
 	if err != nil {
 		return nil, err
 	}
 	return &Client{
 		conn: conn,
 	}, nil
+
 }
 
-func (c *Client) invoke(ctx context.Context, req *Request) (*Response, error) {
-	// 发送请求至服务端
+func (c *Client) invoke(ctx context.Context, request *Request) (*Response, error) {
+	req, err := json.Marshal(request)
 
-	// 转换成二进制数据
-	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	var res []byte
+	res, err = c.Send(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// 用连接发送出去
-	var resp []byte
-	resp, err = c.Send(data)
+	resp := &Response{}
+	err = json.Unmarshal(res, resp)
 	if err != nil {
 		return nil, err
 	}
-	return &Response{
-		data: resp,
-	}, nil
+	return resp, nil
 }
 
-func (c *Client) Send(reqData []byte) ([]byte, error) {
-	// 写数据
-	lenRep := len(reqData)
-	req := make([]byte, lenRep+numOfLengthBytes)
-	binary.BigEndian.PutUint64(req[:numOfLengthBytes], uint64(lenRep))
-	copy(req[numOfLengthBytes:], reqData)
-	_, err := c.conn.Write(req)
+func (c *Client) Send(ctx context.Context, data []byte) ([]byte, error) {
+	err := c.SendMsg(data, c.conn)
 	if err != nil {
+		_ = c.conn.Close()
 		return nil, err
 	}
 
-	// 读数据
-	repLenBs := make([]byte, numOfLengthBytes)
-	_, err = c.conn.Read(repLenBs)
+	var res []byte
+	res, err = c.AcceptMsg(c.conn)
 	if err != nil {
-		return nil, err
-	}
-	repLen := binary.BigEndian.Uint64(repLenBs)
-	repData := make([]byte, repLen)
-	_, err = c.conn.Read(repData)
-	if err != nil {
+		_ = c.conn.Close()
 		return nil, err
 	}
 
-	return repData, nil
+	return res, nil
 }

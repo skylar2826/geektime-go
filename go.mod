@@ -29,7 +29,6 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
-	github.com/gotomicro/ekit v0.0.0-20230224040531-869798da3c4d // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/lib/pq v1.1.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect

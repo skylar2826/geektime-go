@@ -5,8 +5,8 @@ import (
 )
 
 type UserServiceServer struct {
-	msg string
-	err error
+	Msg string
+	Err error
 }
 
 func (u *UserServiceServer) Name() string {
@@ -14,7 +14,8 @@ func (u *UserServiceServer) Name() string {
 }
 
 func (u *UserServiceServer) GetById(ctx context.Context, req *GetByIdRequest) (*GetByIdResponse, error) {
+
 	return &GetByIdResponse{
-		Data: u.msg,
-	}, u.err
+		Data: u.Msg,
+	}, u.Err
 }

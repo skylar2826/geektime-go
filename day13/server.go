@@ -2,34 +2,45 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"geektime-go/day13/message"
+	"geektime-go/day13/serialize"
+	"geektime-go/day13/serialize/json"
 	"net"
 	"reflect"
 )
 
 type Server struct {
-	network  string
-	addr     string
-	services map[string]reflectionStub
+	network    string
+	addr       string
+	services   map[string]reflectionStub
+	serializes map[uint8]serialize.Serializer
 }
 
 func NewServer(network string, addr string) (*Server, error) {
 	s := &Server{
-		network:  network,
-		addr:     addr,
-		services: make(map[string]reflectionStub, 16),
+		network:    network,
+		addr:       addr,
+		services:   make(map[string]reflectionStub, 16),
+		serializes: make(map[uint8]serialize.Serializer, 4),
 	}
+
+	j := &json.Serializer{}
+	s.serializes[j.Code()] = j
 
 	return s, nil
 }
 
 func (s *Server) registerService(service Service) {
 	s.services[service.Name()] = reflectionStub{
-		service: service,
-		value:   reflect.ValueOf(service),
+		service:   service,
+		value:     reflect.ValueOf(service),
+		serialize: s.serializes,
 	}
+}
+
+func (s *Server) registerSerialize(serializer serialize.Serializer) {
+	s.serializes[serializer.Code()] = serializer
 }
 
 func (s *Server) Start() error {
@@ -76,7 +87,7 @@ func (s *Server) invoke(ctx context.Context, req *message.Request) (*message.Res
 	if !ok {
 		return nil, errors.New("服务不存在")
 	}
-	resData, err := service.invoke(ctx, req.MethodName, req.Data)
+	resData, err := service.invoke(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -93,19 +104,25 @@ func (s *Server) invoke(ctx context.Context, req *message.Request) (*message.Res
 }
 
 type reflectionStub struct {
-	service Service
-	value   reflect.Value
+	service   Service
+	value     reflect.Value
+	serialize map[uint8]serialize.Serializer
 }
 
-func (r *reflectionStub) invoke(ctx context.Context, methodName string, arg []byte) ([]byte, error) {
+func (r *reflectionStub) invoke(ctx context.Context, req *message.Request) ([]byte, error) {
+	serializer, ok := r.serialize[req.Serializer]
+	if !ok {
+		return nil, errors.New("序列化协议不存在")
+	}
+
 	serviceElem := reflect.ValueOf(r.service)
-	method := serviceElem.MethodByName(methodName)
+	method := serviceElem.MethodByName(req.MethodName)
 
 	in := make([]reflect.Value, 2)
 	in[0] = reflect.ValueOf(ctx)
 
 	inReq := reflect.New(method.Type().In(1).Elem())
-	err := json.Unmarshal(arg, inReq.Interface())
+	err := serializer.Decode(req.Data, inReq.Interface())
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +135,7 @@ func (r *reflectionStub) invoke(ctx context.Context, methodName string, arg []by
 		return nil, err
 	} else {
 		var er error
-		res, er = json.Marshal(result[0].Interface())
+		res, er = serializer.Encode(result[0].Interface())
 		if er != nil {
 			return nil, er
 		}

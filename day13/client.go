@@ -2,25 +2,64 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"geektime-go/day13/message"
+	"geektime-go/day13/serialize"
+	"geektime-go/day13/serialize/json"
 	"github.com/silenceper/pool"
 	"net"
 	"reflect"
 	"time"
 )
 
-func InitClientProxy(network, addr string, timeout time.Duration, service Service) error {
-	c, err := NewClient(network, addr, timeout)
-	if err != nil {
-		return err
+type Client struct {
+	pool      pool.Pool
+	serialize serialize.Serializer
+}
+
+type ClientOpts func(c *Client)
+
+func ClientWithSerialize(s serialize.Serializer) ClientOpts {
+	return func(c *Client) {
+		c.serialize = s
 	}
-	return setFuncField(service, c)
+}
+
+func NewClient(network, addr string, timeout time.Duration, opts ...ClientOpts) (*Client, error) {
+	p, err := pool.NewChannelPool(&pool.Config{
+		InitialCap:  1,
+		MaxCap:      30,
+		MaxIdle:     10,
+		IdleTimeout: time.Minute,
+		Factory: func() (interface{}, error) {
+			return net.DialTimeout(network, addr, timeout)
+		},
+		Close: func(i interface{}) error {
+			return i.(net.Conn).Close()
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	c := &Client{
+		pool:      p,
+		serialize: &json.Serializer{},
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c, nil
+}
+
+func (c *Client) InitService(service Service) error {
+	return c.setFuncField(service, c)
 }
 
 // 支持远程调用方法
-func setFuncField(service Service, proxy proxy) error {
+func (c *Client) setFuncField(service Service, proxy proxy) error {
 	if service == nil {
 		return errors.New("服务不能为空")
 	}
@@ -43,7 +82,7 @@ func setFuncField(service Service, proxy proxy) error {
 				ctx := args[0].Interface().(context.Context)
 				resVal := reflect.New(fieldTyp.Type.Out(0).Elem())
 
-				reqData, err := json.Marshal(args[1].Interface())
+				reqData, err := c.serialize.Encode(args[1].Interface())
 				if err != nil {
 					return []reflect.Value{
 						resVal,
@@ -54,7 +93,7 @@ func setFuncField(service Service, proxy proxy) error {
 					RequestID:   1,
 					Version:     2,
 					Compressor:  3,
-					Serializer:  4,
+					Serializer:  c.serialize.Code(),
 					ServiceName: service.Name(),
 					MethodName:  fieldTyp.Name,
 					Meta:        map[string]string{},
@@ -77,7 +116,7 @@ func setFuncField(service Service, proxy proxy) error {
 					resErr = errors.New(string(res.Error))
 				}
 				if len(res.Data) > 0 {
-					err = json.Unmarshal(res.Data, resVal.Interface())
+					err = c.serialize.Decode(res.Data, resVal.Interface())
 					if err != nil {
 						return []reflect.Value{
 							resVal,
@@ -102,33 +141,6 @@ func setFuncField(service Service, proxy proxy) error {
 		}
 	}
 	return nil
-}
-
-type Client struct {
-	pool pool.Pool
-}
-
-func NewClient(network, addr string, timeout time.Duration) (*Client, error) {
-	p, err := pool.NewChannelPool(&pool.Config{
-		InitialCap:  1,
-		MaxCap:      30,
-		MaxIdle:     10,
-		IdleTimeout: time.Minute,
-		Factory: func() (interface{}, error) {
-			return net.DialTimeout(network, addr, timeout)
-		},
-		Close: func(i interface{}) error {
-			return i.(net.Conn).Close()
-		},
-	})
-
-	if err != nil {
-		return nil, err
-	}
-	return &Client{
-		pool: p,
-	}, nil
-
 }
 
 func (c *Client) invoke(ctx context.Context, request *message.Request) (*message.Response, error) {

@@ -3,11 +3,15 @@ package rpc
 import (
 	"context"
 	"errors"
+	"geektime-go/day13/compressor"
+	"geektime-go/day13/compressor/gzip"
 	"geektime-go/day13/message"
 	"geektime-go/day13/serialize"
 	"geektime-go/day13/serialize/json"
 	"net"
 	"reflect"
+	"strconv"
+	"time"
 )
 
 type Server struct {
@@ -15,6 +19,7 @@ type Server struct {
 	addr       string
 	services   map[string]reflectionStub
 	serializes map[uint8]serialize.Serializer
+	compressor map[uint8]compressor.Compressor
 }
 
 func NewServer(network string, addr string) (*Server, error) {
@@ -23,24 +28,32 @@ func NewServer(network string, addr string) (*Server, error) {
 		addr:       addr,
 		services:   make(map[string]reflectionStub, 16),
 		serializes: make(map[uint8]serialize.Serializer, 4),
+		compressor: make(map[uint8]compressor.Compressor, 4),
 	}
 
 	j := &json.Serializer{}
+	c := &gzip.Compressor{}
 	s.serializes[j.Code()] = j
+	s.compressor[c.Code()] = c
 
 	return s, nil
 }
 
 func (s *Server) registerService(service Service) {
 	s.services[service.Name()] = reflectionStub{
-		service:   service,
-		value:     reflect.ValueOf(service),
-		serialize: s.serializes,
+		service:    service,
+		value:      reflect.ValueOf(service),
+		serialize:  s.serializes,
+		compressor: s.compressor,
 	}
 }
 
 func (s *Server) registerSerialize(serializer serialize.Serializer) {
 	s.serializes[serializer.Code()] = serializer
+}
+
+func (s *Server) registerCompressor(compressor compressor.Compressor) {
+	s.compressor[compressor.Code()] = compressor
 }
 
 func (s *Server) Start() error {
@@ -63,12 +76,14 @@ func (s *Server) Start() error {
 			return err
 		}
 
-		// 其实需要从请求中拿到 ctx
-		ctx := context.Background()
 		req := message.DecodeReq(reqBs)
+
 		var res *message.Response
-		res, err = s.invoke(ctx, req)
+		res, err = s.invoke(req)
 		if err != nil {
+			if res == nil {
+				res = &message.Response{}
+			}
 			res.Error = []byte(err.Error())
 		}
 		res.CalculateHeaderLength()
@@ -82,34 +97,73 @@ func (s *Server) Start() error {
 	}
 }
 
-func (s *Server) invoke(ctx context.Context, req *message.Request) (*message.Response, error) {
+func (s *Server) invoke(req *message.Request) (*message.Response, error) {
 	service, ok := s.services[req.ServiceName]
 	if !ok {
 		return nil, errors.New("服务不存在")
 	}
-	resData, err := service.invoke(ctx, req)
-	if err != nil {
-		return nil, err
+	ctx := context.Background()
+	var deadlineStr string
+	cancel := func() {}
+	if deadlineStr, ok = req.Meta["deadline"]; ok {
+		if deadline, er := strconv.ParseInt(deadlineStr, 10, 64); er == nil {
+			ctx, cancel = context.WithDeadline(ctx, time.UnixMilli(deadline))
+		}
 	}
+	oneWay, exist := req.Meta["one-way"]
+	if exist && oneWay == "true" {
+		go func() {
+			_, _ = service.invoke(ctx, req)
+			cancel()
+		}()
+		return nil, errors.New("这是单向调用，没有返回值")
+	} else {
+		resData, err := service.invoke(ctx, req)
+		cancel()
 
-	resp := &message.Response{
-		RequestID:  req.RequestID,
-		Version:    req.Version,
-		Compressor: req.Compressor,
-		Serializer: req.Serializer,
-		Data:       resData,
+		resp := &message.Response{
+			RequestID:  req.RequestID,
+			Version:    req.Version,
+			Compressor: req.Compressor,
+			Serializer: req.Serializer,
+			Data:       resData,
+		}
+
+		if err != nil {
+			if res == nil {
+				res = &message.Response{}
+			}
+			res.Error = []byte(err.Error())
+		}
+
+		return resp, nil
 	}
-
-	return resp, nil
 }
 
 type reflectionStub struct {
-	service   Service
-	value     reflect.Value
-	serialize map[uint8]serialize.Serializer
+	service    Service
+	value      reflect.Value
+	serialize  map[uint8]serialize.Serializer
+	compressor map[uint8]compressor.Compressor
 }
 
 func (r *reflectionStub) invoke(ctx context.Context, req *message.Request) ([]byte, error) {
+	// 先解压再反序列化
+	var reqData []byte
+	var c compressor.Compressor
+	if req.Compressor != 0 {
+		var ok bool
+		c, ok = r.compressor[req.Compressor]
+		if !ok {
+			return nil, errors.New("客户端指定的压缩算法服务端不存在")
+		}
+		var err error
+		reqData, err = c.UnCompress(req.Data)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	serializer, ok := r.serialize[req.Serializer]
 	if !ok {
 		return nil, errors.New("序列化协议不存在")
@@ -119,10 +173,11 @@ func (r *reflectionStub) invoke(ctx context.Context, req *message.Request) ([]by
 	method := serviceElem.MethodByName(req.MethodName)
 
 	in := make([]reflect.Value, 2)
+
 	in[0] = reflect.ValueOf(ctx)
 
 	inReq := reflect.New(method.Type().In(1).Elem())
-	err := serializer.Decode(req.Data, inReq.Interface())
+	err := serializer.Decode(reqData, inReq.Interface())
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +194,18 @@ func (r *reflectionStub) invoke(ctx context.Context, req *message.Request) ([]by
 		if er != nil {
 			return nil, er
 		}
+		// 先序列化再压缩
+		if req.Compressor != 0 {
+			c, ok = r.compressor[req.Compressor]
+			if !ok {
+				return nil, errors.New("客户端指定的压缩算法服务端不存在")
+			}
+			res, er = c.Compress(res)
+			if er != nil {
+				return nil, er
+			}
+		}
 	}
 
-	return res, nil
+	return res, result[1].Interface().(error)
 }

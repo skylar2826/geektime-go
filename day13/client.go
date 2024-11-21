@@ -3,18 +3,22 @@ package rpc
 import (
 	"context"
 	"errors"
+	"geektime-go/day13/compressor"
+	"geektime-go/day13/compressor/gzip"
 	"geektime-go/day13/message"
 	"geektime-go/day13/serialize"
 	"geektime-go/day13/serialize/json"
 	"github.com/silenceper/pool"
 	"net"
 	"reflect"
+	"strconv"
 	"time"
 )
 
 type Client struct {
-	pool      pool.Pool
-	serialize serialize.Serializer
+	pool       pool.Pool
+	serialize  serialize.Serializer
+	compressor compressor.Compressor
 }
 
 type ClientOpts func(c *Client)
@@ -22,6 +26,12 @@ type ClientOpts func(c *Client)
 func ClientWithSerialize(s serialize.Serializer) ClientOpts {
 	return func(c *Client) {
 		c.serialize = s
+	}
+}
+
+func ClientWithCompressor(c compressor.Compressor) ClientOpts {
+	return func(client *Client) {
+		client.compressor = c
 	}
 }
 
@@ -43,8 +53,9 @@ func NewClient(network, addr string, timeout time.Duration, opts ...ClientOpts) 
 		return nil, err
 	}
 	c := &Client{
-		pool:      p,
-		serialize: &json.Serializer{},
+		pool:       p,
+		serialize:  &json.Serializer{},
+		compressor: &gzip.Compressor{},
 	}
 
 	for _, opt := range opts {
@@ -89,14 +100,32 @@ func (c *Client) setFuncField(service Service, proxy proxy) error {
 						reflect.ValueOf(err),
 					}
 				}
+				meta := make(map[string]string, 2)
+				if deadline, ok := ctx.Deadline(); ok {
+					meta["deadline"] = strconv.FormatInt(deadline.UnixMilli(), 10)
+				}
+				if isOneWay(ctx) {
+					meta["one-way"] = "true"
+				}
+				// 先序列化再压缩
+				if c.compressor.Code() != 0 {
+					reqData, err = c.compressor.Compress(reqData)
+					if err != nil {
+						return []reflect.Value{
+							resVal,
+							reflect.ValueOf(err),
+						}
+					}
+				}
+
 				req := &message.Request{
 					RequestID:   1,
 					Version:     2,
-					Compressor:  3,
+					Compressor:  c.compressor.Code(),
 					Serializer:  c.serialize.Code(),
 					ServiceName: service.Name(),
 					MethodName:  fieldTyp.Name,
-					Meta:        map[string]string{},
+					Meta:        meta,
 					Data:        reqData,
 				}
 				req.CalculateHeaderLength()
@@ -115,8 +144,25 @@ func (c *Client) setFuncField(service Service, proxy proxy) error {
 				if len(res.Error) > 0 {
 					resErr = errors.New(string(res.Error))
 				}
-				if len(res.Data) > 0 {
-					err = c.serialize.Decode(res.Data, resVal.Interface())
+				resData := res.Data
+				if len(resData) > 0 {
+					// 先解压再反序列化
+					if res.Compressor != 0 {
+						if res.Compressor != c.compressor.Code() {
+							return []reflect.Value{
+								resVal,
+								reflect.ValueOf(errors.New("服务端指定压缩方法客户端不支持")),
+							}
+						}
+						resData, err = c.compressor.UnCompress(resData)
+						if err != nil {
+							return []reflect.Value{
+								resVal,
+								reflect.ValueOf(err),
+							}
+						}
+					}
+					err = c.serialize.Decode(resData, resVal.Interface())
 					if err != nil {
 						return []reflect.Value{
 							resVal,
@@ -144,6 +190,26 @@ func (c *Client) setFuncField(service Service, proxy proxy) error {
 }
 
 func (c *Client) invoke(ctx context.Context, request *message.Request) (*message.Response, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	var resp *message.Response
+	var err error
+	ch := make(chan struct{})
+	go func() {
+		resp, err = c.doInvoke(ctx, request)
+		ch <- struct{}{}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-ch:
+		return resp, err
+	}
+}
+
+func (c *Client) doInvoke(ctx context.Context, request *message.Request) (*message.Response, error) {
 	req := message.EncodeReq(request)
 	resBs, err := c.Send(ctx, req)
 	if err != nil {
@@ -160,11 +226,13 @@ func (c *Client) Send(ctx context.Context, data []byte) ([]byte, error) {
 		_ = c.pool.Close(conn)
 		return nil, err
 	}
-
 	_, err = conn.Write(data)
 	if err != nil {
 		_ = c.pool.Close(conn)
 		return nil, err
+	}
+	if isOneWay(ctx) {
+		return nil, errors.New("这是单向调用，没有返回值")
 	}
 
 	var resBs []byte

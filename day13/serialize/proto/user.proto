@@ -2,6 +2,10 @@ syntax = "proto3";
 package users;
 option go_package = "/gen";
 
+service UserService {
+	rpc GetById(GetByIdReq) returns (GetByIdResp);
+}
+
 message GetByIdReq {
 	int64 id = 1;
 }
@@ -15,4 +19,5 @@ message User {
 	string name = 2;
 }
 
-//		go install github.com/golang/protobuf/protoc-gen-go@latest
+// go install github.com/golang/protobuf/protoc-gen-go@latest
+// protoc --go_out=. --go-grpc_out=. user.proto

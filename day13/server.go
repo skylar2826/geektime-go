@@ -130,10 +130,10 @@ func (s *Server) invoke(req *message.Request) (*message.Response, error) {
 		}
 
 		if err != nil {
-			if res == nil {
-				res = &message.Response{}
+			if resp == nil {
+				resp = &message.Response{}
 			}
-			res.Error = []byte(err.Error())
+			resp.Error = []byte(err.Error())
 		}
 
 		return resp, nil

@@ -1,4 +1,4 @@
-package round_robig
+package round_robin
 
 import (
 	"context"
@@ -13,20 +13,21 @@ import (
 	"time"
 )
 
-func TestBalancer(t *testing.T) {
+func TestE2EBalancer_Pick(t *testing.T) {
 	go func() {
 		us := &userServiceServer{}
 		server := grpc.NewServer()
 		gen.RegisterUserServiceServer(server, us)
-		l, err := net.Listen("tcp", ":8081")
+		l, err := net.Listen("tcp", "127.0.0.1:8085")
 		require.NoError(t, err)
 		err = server.Serve(l)
 		t.Log(err)
 	}()
 
 	time.Sleep(time.Second * 3)
-	balancer.Register(base.NewBalancerBuilder("DEMO_ROUND_ROBIG", &Builder{}, base.Config{HealthCheck: true}))
-	conn, err := grpc.Dial("localhost:8081", grpc.WithInsecure(), grpc.WithDefaultServiceConfig())
+	builder := base.NewBalancerBuilder("TEST_DEMO_ROUND_ROBIN", &Builder{}, base.Config{HealthCheck: true})
+	balancer.Register(builder)
+	conn, err := grpc.Dial("127.0.0.1:8085", grpc.WithInsecure(), grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"TEST_DEMO_ROUND_ROBIN"}`))
 	require.NoError(t, err)
 	uc := gen.NewUserServiceClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)

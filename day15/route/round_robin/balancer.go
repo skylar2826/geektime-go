@@ -1,8 +1,10 @@
 package round_robin
 
 import (
+	"geektime-go/day15/route"
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/balancer/base"
+	"google.golang.org/grpc/resolver"
 	"sync/atomic"
 )
 
@@ -13,21 +15,31 @@ import (
 
 type Balancer struct {
 	index       int32
-	connections []balancer.SubConn
+	connections []subConn
 	len         int32
+	filter      route.Filter
 }
 
 func (b *Balancer) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
-	if len(b.connections) == 0 {
+	candidates := make([]subConn, 0, len(b.connections))
+	for _, c := range b.connections {
+		if b.filter != nil && !b.filter(info, c.addr) {
+			continue
+		}
+		candidates = append(candidates, c)
+	}
+
+	if len(candidates) == 0 {
 		return balancer.PickResult{}, balancer.ErrNoSubConnAvailable
 	}
+
 	idx := atomic.AddInt32(&b.index, 1)
-	c := b.connections[idx%b.len]
+	c := candidates[int(idx)%len(candidates)]
 
 	return balancer.PickResult{
 		// SubConn 对一个实例的连接池的抽象
 		// clientConn 是对一个服务连接池的抽象，clientConn与SubConn是一对多的关系
-		SubConn: c,
+		SubConn: c.c,
 		// 响应回来的回调
 		Done: func(info balancer.DoneInfo) {
 
@@ -36,12 +48,22 @@ func (b *Balancer) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
 }
 
 type Builder struct {
+	Filter route.Filter
 }
 
 func (b Builder) Build(info base.PickerBuildInfo) balancer.Picker {
-	connections := make([]balancer.SubConn, 0, len(info.ReadySCs))
-	for c := range info.ReadySCs {
-		connections = append(connections, c)
+	connections := make([]subConn, 0, len(info.ReadySCs))
+	for c, ci := range info.ReadySCs {
+		connections = append(connections, subConn{
+			c:    c,
+			addr: ci.Address,
+		})
 	}
-	return &Balancer{connections: connections, index: -1, len: int32(len(info.ReadySCs))}
+
+	return &Balancer{connections: connections, index: -1, len: int32(len(info.ReadySCs)), filter: b.Filter}
+}
+
+type subConn struct {
+	c    balancer.SubConn
+	addr resolver.Address
 }

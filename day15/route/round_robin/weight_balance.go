@@ -1,8 +1,10 @@
 package round_robin
 
 import (
+	"geektime-go/day15/route"
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/balancer/base"
+	"google.golang.org/grpc/resolver"
 	"math"
 	"sync"
 )
@@ -11,17 +13,19 @@ import (
 
 type WeightBalancer struct {
 	connections []*weightConn
+	Filter      route.Filter
 }
 
 func (w *WeightBalancer) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
-	if len(w.connections) == 0 {
-		return balancer.PickResult{}, balancer.ErrNoSubConnAvailable
-	}
 
 	var totalWeight uint32
 	var res *weightConn
 
 	for _, connection := range w.connections {
+		if w.Filter != nil || !w.Filter(info, connection.addr) {
+			continue
+		}
+
 		connection.mutex.Lock()
 		totalWeight = totalWeight + connection.efficientWeight
 		connection.currentWeight = connection.currentWeight + connection.efficientWeight
@@ -29,6 +33,9 @@ func (w *WeightBalancer) Pick(info balancer.PickInfo) (balancer.PickResult, erro
 			res = connection
 		}
 		connection.mutex.Unlock()
+	}
+	if res == nil {
+		return balancer.PickResult{}, balancer.ErrNoSubConnAvailable
 	}
 
 	res.mutex.Lock()
@@ -57,6 +64,7 @@ func (w *WeightBalancer) Pick(info balancer.PickInfo) (balancer.PickResult, erro
 }
 
 type WeightBalancerBuilder struct {
+	Filter route.Filter
 }
 
 func (w *WeightBalancerBuilder) Build(info base.PickerBuildInfo) balancer.Picker {
@@ -68,12 +76,14 @@ func (w *WeightBalancerBuilder) Build(info base.PickerBuildInfo) balancer.Picker
 			currentWeight:   weight,
 			efficientWeight: weight,
 			c:               c,
+			addr:            ci.Address,
 		}
 
 		connections = append(connections, connection)
 	}
 	return &WeightBalancer{
 		connections: connections,
+		Filter:      w.Filter,
 	}
 }
 
@@ -83,4 +93,5 @@ type weightConn struct {
 	currentWeight   uint32
 	efficientWeight uint32
 	mutex           sync.Mutex
+	addr            resolver.Address
 }

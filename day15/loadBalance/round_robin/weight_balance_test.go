@@ -1,58 +1,58 @@
 package round_robin
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/balancer"
-	"google.golang.org/grpc/balancer/base"
 	"testing"
 )
 
-func TestWeightBalancerBuilder_Build(t *testing.T) {
-	type args struct {
-		info base.PickerBuildInfo
-	}
-	tests := []struct {
-		name string
-		args args
-		want balancer.Picker
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := &WeightBalancerBuilder{}
-			assert.Equalf(t, tt.want, w.Build(tt.args.info), "Build(%v)", tt.args.info)
-		})
-	}
-}
-
 func TestWeightBalancer_Pick(t *testing.T) {
-	type fields struct {
-		connections []*weightConn
+	b := &WeightBalancer{
+		connections: []*weightConn{
+			&weightConn{
+				c: SubConn{
+					Name: "weight-5",
+				},
+				weight:          uint32(5),
+				currentWeight:   uint32(5),
+				efficientWeight: uint32(5),
+			},
+			&weightConn{
+				c: SubConn{
+					Name: "weight-4",
+				},
+				weight:          uint32(4),
+				currentWeight:   uint32(4),
+				efficientWeight: uint32(4),
+			},
+			&weightConn{
+				c: SubConn{
+					Name: "weight-3",
+				},
+				weight:          uint32(3),
+				currentWeight:   uint32(3),
+				efficientWeight: uint32(3),
+			},
+		},
 	}
-	type args struct {
-		info balancer.PickInfo
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    balancer.PickResult
-		wantErr assert.ErrorAssertionFunc
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := &WeightBalancer{
-				connections: tt.fields.connections,
-			}
-			got, err := w.Pick(tt.args.info)
-			if !tt.wantErr(t, err, fmt.Sprintf("Pick(%v)", tt.args.info)) {
-				return
-			}
-			assert.Equalf(t, tt.want, got, "Pick(%v)", tt.args.info)
-		})
-	}
+
+	res, err := b.Pick(balancer.PickInfo{})
+	assert.NoError(t, err)
+	assert.Equal(t, res.SubConn.(SubConn).Name, "weight-5")
+
+	res, err = b.Pick(balancer.PickInfo{})
+	assert.NoError(t, err)
+	assert.Equal(t, res.SubConn.(SubConn).Name, "weight-4")
+
+	res, err = b.Pick(balancer.PickInfo{})
+	assert.NoError(t, err)
+	assert.Equal(t, res.SubConn.(SubConn).Name, "weight-3")
+
+	res, err = b.Pick(balancer.PickInfo{})
+	assert.NoError(t, err)
+	assert.Equal(t, res.SubConn.(SubConn).Name, "weight-5")
+
+	res, err = b.Pick(balancer.PickInfo{})
+	assert.NoError(t, err)
+	assert.Equal(t, res.SubConn.(SubConn).Name, "weight-4")
 }

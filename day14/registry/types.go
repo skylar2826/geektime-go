@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-type registry interface {
+type Registry interface {
 	Registry(ctx context.Context, si ServiceInstance) error
 	UnRegistry(ctx context.Context, si ServiceInstance) error
 	ListServices(ctx context.Context, serviceName string) ([]ServiceInstance, error)

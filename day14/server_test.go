@@ -11,11 +11,6 @@ import (
 	"time"
 )
 
-type B struct {
-	m map[string]string
-	E map[string]string
-}
-
 func TestServer(t *testing.T) {
 	cc, err := clientv3.New(clientv3.Config{
 		Endpoints: []string{"127.0.0.1:2379"},

@@ -53,7 +53,7 @@ func NewClient(opts ...ClientOption) *Client {
 	return c
 }
 
-func (c *Client) dial(ctx context.Context, serviceName string) (*grpc.ClientConn, error) {
+func (c *Client) Dial(ctx context.Context, serviceName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	dialOptions := make([]grpc.DialOption, 0, 4)
 	if c.insecure {
 		dialOptions = append(dialOptions, grpc.WithInsecure())
@@ -68,6 +68,9 @@ func (c *Client) dial(ctx context.Context, serviceName string) (*grpc.ClientConn
 			return nil, err
 		}
 		dialOptions = append(dialOptions, grpc.WithDefaultServiceConfig(string(bs)))
+	}
+	if len(opts) > 0 {
+		dialOptions = append(dialOptions, opts...)
 	}
 	//conn, err := grpc.Dial(c.address, dialOptions...)
 	conn, err := grpc.DialContext(ctx, fmt.Sprintf("passthrough:///%s", serviceName), dialOptions...)

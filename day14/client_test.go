@@ -32,7 +32,7 @@ func TestClient(t *testing.T) {
 	defer cancel()
 	var conn *grpc.ClientConn
 	ctx = context.WithValue(ctx, "Group", "B")
-	conn, err = c.dial(ctx, "user-service")
+	conn, err = c.Dial(ctx, "user-service")
 	if err != nil {
 		t.Log(err)
 	}
